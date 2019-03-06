@@ -34,6 +34,8 @@ void draw_map(void);
 void print_bottom(char* text);
 void create_food();
 void print_status(const char* status);
+int ask_end();
+int start_game();
 
 int y, x;
 int dir;
@@ -48,11 +50,6 @@ int gw_w, gw_h;
 
 int main(void)
 {
-    float speed, secs;
-    clock_t start;
-    int ch;
-    std::stringstream stream;
-
     /* init random */
     srand(time(NULL));
 
@@ -68,14 +65,29 @@ int main(void)
     keypad(stdscr, TRUE);
     cbreak();
     noecho();
-    nodelay(stdscr, TRUE);
     curs_set(0);
     init_pair(1, COLOR_YELLOW, COLOR_BLACK);
     init_pair(2, COLOR_YELLOW, COLOR_BLUE);
     init_pair(3, COLOR_RED, COLOR_GREEN);
     init_pair(4, COLOR_WHITE, COLOR_BLACK);
     init_pair(5, COLOR_BLUE, COLOR_BLACK);
+    
     clear();
+    
+    /* start the game */
+    while(start_game()){}
+
+    /* clean up */
+    endwin();
+    exit(0);
+}
+
+int start_game()
+{
+    float speed, secs;
+    clock_t start;
+    int ch;
+    std::stringstream stream;
 
     if(LINES < 10 || COLS < 35){
         endwin();
@@ -100,6 +112,7 @@ int main(void)
 
     /* init snake */
     wbkgd(gamew, COLOR_PAIR(3));
+    snake.clear();
     for(int i = 0; i < START_LEN; i++) {
         point p = {x + 1 - START_LEN + i, y};
         snake.push_front(p);
@@ -115,11 +128,12 @@ int main(void)
     /* frame rate is 1 second (speed) */
     speed = 1.0;
 
-
     /* clocks */
-    curr = clock();
     last = 0;
 
+    /* async char read */
+    nodelay(stdscr, TRUE);
+    
     /* run */
     running = 1;
 
@@ -130,9 +144,8 @@ int main(void)
         /* print status */
         secs = ((float)(curr - start) / CLOCKS_PER_SEC);
         stream << std::fixed << std::setprecision(2) << secs;
-        std::string st = "Score: " + std::to_string(score) + "      Elapsed: " + std::to_string((int) secs) + " seconds         Speed: x" + std::to_string((int)(1.0F/speed));
+        std::string st = "  Score: " + std::to_string(score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: x" + std::to_string((int)(1.0F/speed));
         print_status(st.c_str());
-
 
         /* get char async, see nodelay() */
         ch = getch();
@@ -227,21 +240,36 @@ int main(void)
     while (running);
 
     /* done */
-    std::string msg = "Quit (q) or restart (r)?";
-    int minl = msg.size() + 2;
+    std::string msg0 = "The game has finished";
+    std::string msg1 = "(q)      Quit";
+    std::string msg2 = "(r)      Restart";
+    int minl = msg0.size() + 2;
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     nodelay(stdscr, FALSE);
-    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 1, msg.c_str());
+    mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - minl / 2 + 1, msg0.c_str());
+    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 5, msg1.c_str());
+    mvwaddstr(endw, ew_h / 2 + 1, ew_w / 2 - minl / 2 + 5, msg2.c_str());
     box(endw, 0, 0);
     wrefresh(endw);
-    
-    getch();
+   
+    return ask_end();
+}
 
-    endwin();
+int ask_end()
+{
+    int opt = getch();
 
-    exit(0);
+    switch(opt){
+        case 'q':
+            return 0;
+        case 'r':
+            // Restart
+            return 1;
+        default:
+            return ask_end();
+    }
 }
 
 void print_status(const char* status)
