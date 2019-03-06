@@ -4,6 +4,8 @@
 #include <string>
 #include <deque>
 #include <algorithm>
+#include <iomanip> // setprecision
+#include <sstream> // stringstream
 #include <curses.h>
 #include <stdlib.h>
 #include <time.h>
@@ -33,11 +35,12 @@ int is_move_food(int y, int x);
 void draw_map(void);
 void print_bottom(char* text);
 void create_food();
-void print_status();
+void print_status(const char* status);
 
 int y, x;
 int dir;
 int running;
+int score;
 std::deque<point> snake;
 point food;
 int nfood;
@@ -47,10 +50,10 @@ int gw_w, gw_h;
 
 int main(void)
 {
-    float speed;
-
-
+    float speed, secs;
+    clock_t start;
     int ch;
+    std::stringstream stream;
 
     /* init random */
     srand(time(NULL));
@@ -65,6 +68,12 @@ int main(void)
 
     clear();
 
+    if(LINES < 10 || COLS < 35){
+        endwin();
+        std::cout << "Terminal too small! (min [35,10], current [" << COLS << "," << LINES << "]" << std::endl;
+        exit(0);
+    }
+
     /* create window */
     gw_w = COLS;
     gw_h = LINES - 1;
@@ -74,9 +83,11 @@ int main(void)
     draw_map();
 
     /* start player at [START_LEN,5] going right */
-    x = START_LEN + 5;
-    y = 10;
+    x = START_LEN + 1;
+    y = 2;
     dir = RIGHT;
+    score = 0;
+    start = clock();
 
     /* init snake */
     for(int i = 0; i < START_LEN; i++) {
@@ -103,8 +114,15 @@ int main(void)
     running = 1;
 
     do {
+        /* update current time */
+        curr = clock();
+
         /* print status */
-        print_status();
+        secs = ((float)(curr - start) / CLOCKS_PER_SEC);
+        stream << std::fixed << std::setprecision(2) << secs;
+        std::string st = "Score: " + std::to_string(score) + "      Elapsed: " + std::to_string((int) secs) + " seconds         Speed: x" + std::to_string((int)(1.0F/speed));
+        print_status(st.c_str());
+
 
         /* get char async, see nodelay() */
         ch = getch();
@@ -115,22 +133,26 @@ int main(void)
                 case KEY_UP:
                 case 'w':
                 case 'k':
-                    do_chdir(y - 1, x, UP, DOWN);
+                    if(dir != DOWN)
+                        do_chdir(y - 1, x, UP, DOWN);
                     break;
                 case KEY_DOWN:
                 case 's':
                 case 'j':
-                    do_chdir(y + 1, x, DOWN, UP);
+                    if(dir != UP)
+                        do_chdir(y + 1, x, DOWN, UP);
                     break;
                 case KEY_LEFT:
                 case 'a':
                 case 'h':
-                    do_chdir(y, x - 1, LEFT, RIGHT);
+                    if(dir != RIGHT)
+                        do_chdir(y, x - 1, LEFT, RIGHT);
                     break;
                 case KEY_RIGHT:
                 case 'd':
                 case 'l':
-                    do_chdir(y, x + 1, RIGHT, LEFT);
+                    if(dir != LEFT)
+                        do_chdir(y, x + 1, RIGHT, LEFT);
                     break;
                 case 'q':
                     // quit
@@ -138,11 +160,12 @@ int main(void)
                     curr = last = clock();
                     break;
                 case '+':
-                    speed /= 2.0F;
+                    speed = std::clamp(speed / 2.0F, 0.03125F, 1.0F);
                     curr = last = clock();
                     break;
                 case '-':
-                    speed *= 2.0F;
+                    speed = std::clamp(speed * 2.0F, 0.03125F, 1.0F);
+                    curr = last = clock();
                     break;
             }
         }
@@ -179,10 +202,9 @@ int main(void)
         if(food.x == x && food.y == y){
             create_food();
             nfood = 1;
+            score++;
         }
 
-        /* update current time */
-        curr = clock();
         
         /* refresh */
         box(gamew, 0, 0);
@@ -193,12 +215,12 @@ int main(void)
 
     /* done */
     std::string msg = "Press any key to quit";
-    int minl = msg.size();
+    int minl = msg.size() + 2;
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     nodelay(stdscr, FALSE);
-    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2, msg.c_str());
+    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 1, msg.c_str());
     box(endw, 0, 0);
     wrefresh(endw);
     
@@ -209,18 +231,19 @@ int main(void)
     exit(0);
 }
 
-void print_status()
+void print_status(const char* status)
 {
+    mvhline(LINES - 1, 0, EMPTY, COLS);
     move(LINES - 1, 0);
-    printw("C: %d  L: %d", COLS, LINES);
+    printw(status);
 }
 
 point rd()
 {
     point c;
     while(1){
-        c.x = rand() % COLS;
-        c.y = rand() % LINES;
+        c.x = rand() % (gw_w - 2) + 1;
+        c.y = rand() % (gw_h - 2) + 1;
 
         int hit = 0;
         std::deque<point>::iterator it = snake.begin();
