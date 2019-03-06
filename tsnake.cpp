@@ -261,13 +261,8 @@ point rd()
         c.x = rand() % (gw_w - 2) + 1;
         c.y = rand() % (gw_h - 2) + 1;
 
-        int hitme = 0;
-        std::deque<point>::iterator it = snake.begin();
-        while (it != snake.end() && !hitme){
-            hitme = it->x == c.x && it->y == c.y;
-            *it++;
-        }
-        if(!hitme)
+        int what = mvwinch(gamew, c.y, c.x) & A_CHARTEXT;
+        if(what == EMPTY)
             return c;
     }
 }
