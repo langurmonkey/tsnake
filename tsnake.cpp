@@ -1,16 +1,17 @@
-/* snake.cpp */
+/* tsnake.cpp */
 
 #include <iostream>
 #include <string>
 #include <deque>
+#include <algorithm>
 #include <curses.h>
 #include <stdlib.h>
 #include <time.h>
 
 #define EMPTY  	    ' '
-#define SNAKE       '*'
-#define FOOD        '.'
-#define WALL        '#'
+#define SNAKE       '#'
+#define FOOD        'x'
+#define WALL        '/'
 
 #define UP          0
 #define DOWN        1
@@ -23,27 +24,36 @@ struct point {
     int x, y;
 };
 
-void update(int x, int y, std::deque<point>* snake);
-void paint_snake(std::deque<point>* snake);
-void do_chdir(int* y, int* x, int* dir, int* running, clock_t* curr, clock_t* last, std::deque<point>* snake, int newy, int newx, int newdir, int opposite_dir);
+void update(int x, int y);
+void paint_snake();
+void do_chdir(int newy, int newx, int newdir, int opposite_dir);
 int out_of_boudns(int y, int x);
 int is_move_hit(int y, int x);
 int is_move_food(int y, int x);
 void draw_map(void);
 void print_bottom(char* text);
+void create_food();
+void print_status();
 
+int y, x;
+int dir;
+int running;
+std::deque<point> snake;
+point food;
+int nfood;
+clock_t curr, last;
+WINDOW* gamew;
+int gw_w, gw_h;
 
 int main(void)
 {
     float speed;
-    int y, x;
-    int dir;
-    int running;
-    std::deque<point> snake;
 
-    clock_t curr, last;
 
     int ch;
+
+    /* init random */
+    srand(time(NULL));
 
     /* initialize curses */
     initscr();
@@ -55,37 +65,48 @@ int main(void)
 
     clear();
 
+    /* create window */
+    gw_w = COLS;
+    gw_h = LINES - 1;
+    gamew = newwin(gw_h, gw_w, 0, 0);
+
     /* initialize the map if any */
     draw_map();
 
     /* start player at [START_LEN,5] going right */
-    x = START_LEN;
-    y = 5;
+    x = START_LEN + 5;
+    y = 10;
     dir = RIGHT;
 
     /* init snake */
     for(int i = 0; i < START_LEN; i++) {
         point p = {x + 1 - START_LEN + i, y};
         snake.push_front(p);
-        mvaddch(p.y, p.x, SNAKE);
+        mvwaddch(gamew, p.y, p.x, SNAKE);
     }
+
+    /* init food */
+    create_food();
+
     refresh();
+    wrefresh(gamew);
 
     /* frame rate is 1 second (speed) */
     speed = 1.0;
 
-    /* print cols and lines */
-    move(LINES - 1, 0);
-    printw("C: %d  L: %d", COLS, LINES);
 
     /* clocks */
     curr = clock();
-    last = curr;
+    last = 0;
 
     /* run */
     running = 1;
 
     do {
+        /* print status */
+        print_status();
+
+        /* get char async, see nodelay() */
         ch = getch();
 
         /* test inputted key and determine direction */
@@ -94,22 +115,22 @@ int main(void)
                 case KEY_UP:
                 case 'w':
                 case 'k':
-                    do_chdir(&y, &x, &dir, &running, &curr, &last, &snake, y - 1, x, UP, DOWN);
+                    do_chdir(y - 1, x, UP, DOWN);
                     break;
                 case KEY_DOWN:
                 case 's':
                 case 'j':
-                    do_chdir(&y, &x, &dir, &running, &curr, &last, &snake, y + 1, x, DOWN, UP);
+                    do_chdir(y + 1, x, DOWN, UP);
                     break;
                 case KEY_LEFT:
                 case 'a':
                 case 'h':
-                    do_chdir(&y, &x, &dir, &running, &curr, &last, &snake, y, x - 1, LEFT, RIGHT);
+                    do_chdir(y, x - 1, LEFT, RIGHT);
                     break;
                 case KEY_RIGHT:
                 case 'd':
                 case 'l':
-                    do_chdir(&y, &x, &dir, &running, &curr, &last, &snake, y, x + 1, RIGHT, LEFT);
+                    do_chdir(y, x + 1, RIGHT, LEFT);
                     break;
                 case 'q':
                     // quit
@@ -150,23 +171,37 @@ int main(void)
                 break;
             } else {
                 /* update */
-                update(x, y, &snake);
+                update(x, y);
             }
+        }
+        
+        /* chech food */
+        if(food.x == x && food.y == y){
+            create_food();
+            nfood = 1;
         }
 
         /* update current time */
         curr = clock();
         
         /* refresh */
+        box(gamew, 0, 0);
+        wrefresh(gamew);
         refresh();
     }
     while (running);
 
     /* done */
-    nodelay(stdscr, FALSE);
     std::string msg = "Press any key to quit";
-    mvaddstr(LINES / 2, COLS / 2 - msg.size() / 2, msg.c_str());
-    refresh();
+    int minl = msg.size();
+    int ew_w = std::clamp(COLS / 2, minl, COLS);
+    int ew_h = std::clamp(LINES / 2, 4, LINES);
+    WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
+    nodelay(stdscr, FALSE);
+    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2, msg.c_str());
+    box(endw, 0, 0);
+    wrefresh(endw);
+    
     getch();
 
     endwin();
@@ -174,37 +209,72 @@ int main(void)
     exit(0);
 }
 
-void update(int x, int y, std::deque<point>* snake)
+void print_status()
 {
-    point newpoint = {x, y};
-    snake->push_front(newpoint);
-    point erase = snake->back();
-    snake->pop_back();
-
-    mvaddch(erase.y, erase.x, EMPTY);
-    move(y, x);
-    paint_snake(snake);
+    move(LINES - 1, 0);
+    printw("C: %d  L: %d", COLS, LINES);
 }
 
-void paint_snake(std::deque<point>* snake)
+point rd()
 {
-    std::deque<point>::iterator it = snake->begin();
-    while (it != snake->end()){
-        mvaddch(it->y, it->x, SNAKE);
+    point c;
+    while(1){
+        c.x = rand() % COLS;
+        c.y = rand() % LINES;
+
+        int hit = 0;
+        std::deque<point>::iterator it = snake.begin();
+        while (it != snake.end() && !hit){
+            hit = it->x == c.x && it->y == c.y;
+            *it++;
+        }
+        if(!hit)
+            return c;
+    }
+}
+
+void create_food()
+{
+    point newp = rd();
+    food.x = newp.x;
+    food.y = newp.y;
+    mvwaddch(gamew, food.y, food.x, FOOD);
+}
+
+void update(int x, int y)
+{
+    point newpoint = {x, y};
+    snake.push_front(newpoint);
+    if(!nfood){
+        point erase = snake.back();
+        snake.pop_back();
+        mvwaddch(gamew, erase.y, erase.x, EMPTY);
+    }else{
+        nfood = 0;
+    }
+    move(y, x);
+    paint_snake();
+}
+
+void paint_snake()
+{
+    std::deque<point>::iterator it = snake.begin();
+    while (it != snake.end()){
+        mvwaddch(gamew, it->y, it->x, SNAKE);
         *it++;
     }
 }
 
-void do_chdir(int* y, int* x, int* dir, int* running, clock_t* curr, clock_t* last, std::deque<point>* snake, int newy, int newx, int newdir, int opposite_dir)
+void do_chdir(int newy, int newx, int newdir, int opposite_dir)
 {
     if (!is_move_hit(newy, newx)) {
-        update(newx, newy, snake);
-        *x = newx;
-        *y = newy;
-        *dir = newdir;
-        *curr = *last = clock();
-    } else if (*dir != opposite_dir){
-        *running = 0;
+        update(newx, newy);
+        x = newx;
+        y = newy;
+        dir = newdir;
+        curr = last = clock();
+    } else if (dir != opposite_dir){
+        running = 0;
     }
 }
 
@@ -216,7 +286,7 @@ void print_bottom(const char* text)
 
 int out_of_bounds(int y, int x)
 {
-    return y < 0 || x < 0 || y > LINES-1 || x > COLS-1;
+    return y <= 0 || x <= 0 || y >= gw_h - 1 || x >= gw_w - 1;
 }
 
 int is_move_hit(int y, int x)
@@ -235,7 +305,7 @@ void draw_map(void)
 {
     int y;
     for (y = 0; y < LINES; y++) {
-        mvhline(y, 0, EMPTY, COLS);
+        mvwhline(gamew, y, 0, EMPTY, COLS);
     }
 }
 

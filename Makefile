@@ -1,6 +1,6 @@
 CPP=g++
 CC=gcc
-CFLAGS=-lncurses -Wall -g
+CFLAGS=-lncurses -Wall -g -std=c++17
 
-snake: tsnake.cpp
+tsnake: tsnake.cpp
 	$(CPP) tsnake.cpp -o tsnake $(CFLAGS)
