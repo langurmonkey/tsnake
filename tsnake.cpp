@@ -27,7 +27,6 @@ struct point {
 };
 
 void update(int x, int y);
-void paint_snake();
 void do_chdir(int newy, int newx, int newdir, int opposite_dir);
 int out_of_boudns(int y, int x);
 int is_move_hit(int y, int x);
@@ -262,13 +261,13 @@ point rd()
         c.x = rand() % (gw_w - 2) + 1;
         c.y = rand() % (gw_h - 2) + 1;
 
-        int hit = 0;
+        int hitme = 0;
         std::deque<point>::iterator it = snake.begin();
-        while (it != snake.end() && !hit){
-            hit = it->x == c.x && it->y == c.y;
+        while (it != snake.end() && !hitme){
+            hitme = it->x == c.x && it->y == c.y;
             *it++;
         }
-        if(!hit)
+        if(!hitme)
             return c;
     }
 }
@@ -288,6 +287,7 @@ void update(int x, int y)
     wbkgd(gamew, COLOR_PAIR(3));
     point newpoint = {x, y};
     snake.push_front(newpoint);
+    mvwaddch(gamew, y, x, SNAKE);
     if(!nfood){
         point erase = snake.back();
         snake.pop_back();
@@ -296,16 +296,6 @@ void update(int x, int y)
         nfood = 0;
     }
     move(y, x);
-    paint_snake();
-}
-
-void paint_snake()
-{
-    std::deque<point>::iterator it = snake.begin();
-    while (it != snake.end()){
-        mvwaddch(gamew, it->y, it->x, SNAKE);
-        *it++;
-    }
 }
 
 void do_chdir(int newy, int newx, int newdir, int opposite_dir)
@@ -334,15 +324,8 @@ int out_of_bounds(int y, int x)
 
 int is_move_hit(int y, int x)
 {
-    int selfhit = 0;
-    std::deque<point>::iterator it = snake.begin();
-    while (it != snake.end()){
-        selfhit = it->x == x && it->y == y;
-        if(selfhit)
-            break;
-        *it++;
-    }
-    return selfhit || out_of_bounds(y, x);
+    int testch = mvwinch(gamew, y, x) & A_CHARTEXT;
+    return testch == SNAKE || out_of_bounds(y, x);
 }
 
 void draw_map(void)
