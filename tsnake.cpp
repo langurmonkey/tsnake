@@ -14,7 +14,7 @@
 /* defines */
 #define EMPTY  	    ' '
 #define SNAKE       '#'
-#define FOOD        'x'
+#define FOOD        'O'
 #define WALL        '/'
 
 #define UP          0
@@ -23,6 +23,9 @@
 #define LEFT        3
 
 #define START_LEN   4
+
+#define ALIGN_RIGHT 0
+#define ALIGN_LEFT  1
 
 /* structs */
 struct point {
@@ -62,12 +65,19 @@ int is_move_hit(game_state* state, int y, int x);
 void draw_map(game_state* state);
 void print_bottom(char* text);
 void create_food(game_state* state);
-void print_status(const char* status);
+void print_status(std::string status, int align, int col);
 int ask_end();
 bool speed_scl(game_state* state, float scale);
 bool speed_up(game_state* state);
 bool speed_down(game_state* state);
 int start_game();
+
+#define C_DEFAULT 1
+#define C_FOOD    2
+#define C_SNAKE   3
+#define C_STATUS  4
+#define C_BORDER  5
+#define C_GREEN   6
 
 int main(void)
 {
@@ -76,22 +86,17 @@ int main(void)
 
     /* initialize curses */
     initscr();
-    if(has_colors() == FALSE) {
-        endwin();
-        printf("Your terminal does not support color\n");
-        exit(1);
-    } else {
-        start_color();
-    }
+    start_color();
     keypad(stdscr, TRUE);
     cbreak();
     noecho();
     curs_set(0);
-    init_pair(1, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(2, COLOR_YELLOW, COLOR_BLUE);
-    init_pair(3, COLOR_RED, COLOR_GREEN);
-    init_pair(4, COLOR_WHITE, COLOR_BLACK);
-    init_pair(5, COLOR_BLUE, COLOR_BLACK);
+    init_pair(C_STATUS, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(C_FOOD, COLOR_BLACK, COLOR_BLUE);
+    init_pair(C_SNAKE, COLOR_RED, COLOR_GREEN);
+    init_pair(C_DEFAULT, COLOR_WHITE, COLOR_BLACK);
+    init_pair(C_BORDER, COLOR_BLUE, COLOR_BLACK);
+    init_pair(C_GREEN, COLOR_GREEN, COLOR_BLACK);
     
     clear();
     
@@ -136,13 +141,14 @@ int start_game()
     start = clock();
 
     /* init snake */
-    wbkgd(state.gamew, COLOR_PAIR(3));
+    wattron(state.gamew, COLOR_PAIR(C_SNAKE));
     state.snake.clear();
     for(int i = 0; i < START_LEN; i++) {
         point p = {state.pos.x + 1 - START_LEN + i, state.pos.y};
         state.snake.push_front(p);
         mvwaddch(state.gamew, p.y, p.x, SNAKE);
     }
+    wattroff(state.gamew, COLOR_PAIR(C_SNAKE));
 
     /* init food */
     create_food(&state);
@@ -167,10 +173,14 @@ int start_game()
         state.curr = clock();
 
         /* print status */
+        mvhline(LINES - 1, 0, EMPTY, COLS);
+        
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
         stream << std::fixed << std::setprecision(2) << secs;
         std::string st = "  Score: " + std::to_string(state.score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: x" + std::to_string((int)(1.0F / state.speed));
-        print_status(st.c_str());
+
+        print_status(st, ALIGN_LEFT, C_STATUS);
+        print_status("(q) end game", ALIGN_RIGHT, C_DEFAULT);
 
         /* get char async, see nodelay() */
         ch = getch();
@@ -257,26 +267,37 @@ int start_game()
 
         
         /* refresh */
-        wbkgd(state.gamew, COLOR_PAIR(5));
+        wattron(state.gamew, COLOR_PAIR(C_BORDER));
         box(state.gamew, 0, 0);
-        wrefresh(state.gamew);
+        wattroff(state.gamew, COLOR_PAIR(C_BORDER));
+
+
         refresh();
+        wrefresh(state.gamew);
     }
     while (state.running);
 
     /* done */
-    std::string msg0 = "The game has finished";
-    std::string msg1 = "(q)      Quit";
-    std::string msg2 = "(r)      Restart";
+    std::string msg3 = "YOUR SCORE: " + std::to_string(state.score);
+    std::string msg0 = "The game has finished, quit?";
+    std::string msg1 = "(y|q)      Quit";
+    std::string msg2 = "(n|r)      Restart game";
     int minl = msg0.size() + 2;
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     nodelay(stdscr, FALSE);
-    mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - minl / 2 + 1, msg0.c_str());
-    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 5, msg1.c_str());
-    mvwaddstr(endw, ew_h / 2 + 1, ew_w / 2 - minl / 2 + 5, msg2.c_str());
+
+    /* score in green */
+    wattron(endw, COLOR_PAIR(C_GREEN));
+    mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - msg3.size() / 2, msg3.c_str());
+    wattroff(endw, COLOR_PAIR(C_GREEN));
+
+    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 1, msg0.c_str());
+    mvwaddstr(endw, ew_h / 2 + 2, ew_w / 2 - minl / 2 + 5, msg1.c_str());
+    mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2 + 5, msg2.c_str());
     box(endw, 0, 0);
+    
     wrefresh(endw);
    
     return ask_end();
@@ -287,8 +308,10 @@ int ask_end()
     int opt = getch();
 
     switch(opt){
+        case 'y':
         case 'q':
             return 0;
+        case 'n':
         case 'r':
             // Restart
             return 1;
@@ -297,14 +320,20 @@ int ask_end()
     }
 }
 
-void print_status(const char* status)
+void print_status(std::string status, int align, int col)
 {
-    attron(COLOR_PAIR(1));
-    mvhline(LINES - 1, 0, EMPTY, COLS);
-    move(LINES - 1, 0);
-    printw(status);
-    attroff(COLOR_PAIR(1));
-    refresh();
+    attron(COLOR_PAIR(col));
+    switch(align){
+        case ALIGN_LEFT:
+            move(LINES - 1, 0);
+            printw(status.c_str());
+            break;
+        case ALIGN_RIGHT:
+            move(LINES - 1, COLS - status.size() - 1);
+            printw(status.c_str());
+            break;
+    }
+    attroff(COLOR_PAIR(col));
 }
 
 point rd(game_state* state)
@@ -324,16 +353,19 @@ void create_food(game_state* state)
     point newp = rd(state);
     state->food.x = newp.x;
     state->food.y = newp.y;
-    wbkgd(state->gamew, COLOR_PAIR(2));
+    wattron(state->gamew, COLOR_PAIR(C_FOOD));
     mvwaddch(state->gamew, state->food.y, state->food.x, FOOD);
+    wattroff(state->gamew, COLOR_PAIR(C_FOOD));
 }
 
 void update(game_state* state, int newy, int newx)
 {
-    wbkgd(state->gamew, COLOR_PAIR(3));
     point newpoint = {newx, newy};
     state->snake.push_front(newpoint);
+
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE));
     mvwaddch(state->gamew, newy, newx, SNAKE);
+    wattroff(state->gamew, COLOR_PAIR(C_SNAKE));
     if(!state->f_eat){
         point erase = state->snake.back();
         state->snake.pop_back();
