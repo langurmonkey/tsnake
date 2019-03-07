@@ -6,10 +6,12 @@
 #include <algorithm>
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
+
 #include <curses.h>
 #include <stdlib.h>
 #include <time.h>
 
+/* defines */
 #define EMPTY  	    ' '
 #define SNAKE       '#'
 #define FOOD        'x'
@@ -22,31 +24,50 @@
 
 #define START_LEN   4
 
+/* structs */
 struct point {
     int x, y;
 };
 
-void update(int x, int y);
-void do_chdir(int newy, int newx, int newdir, int opposite_dir);
-int out_of_boudns(int y, int x);
-int is_move_hit(int y, int x);
-void draw_map(void);
+struct game_state {
+    // current position of the head of the snake
+    point pos;
+    // current direction
+    int dir;
+    // current score
+    int score;
+    // snake speed in seconds/cell
+    float speed;
+    // are we running?
+    bool running;
+    // snake queue
+    std::deque<point> snake;
+    // current food position
+    point food;
+    // flag that goes up when we eat
+    bool f_eat;
+    // timers
+    clock_t curr, last;
+    // game window
+    WINDOW* gamew;
+    // game window size
+    int gw_w, gw_h;
+};
+
+/* function definitions */
+void update(game_state* state, int newy, int newx);
+void do_chdir(game_state* state, int newy, int newx, int newdir, int opposite_dir);
+int out_of_boudns(game_state* state, int y, int x);
+int is_move_hit(game_state* state, int y, int x);
+void draw_map(game_state* state);
 void print_bottom(char* text);
-void create_food();
+void create_food(game_state* state);
 void print_status(const char* status);
 int ask_end();
+bool speed_scl(game_state* state, float scale);
+bool speed_up(game_state* state);
+bool speed_down(game_state* state);
 int start_game();
-
-int y, x;
-int dir;
-int running;
-int score;
-std::deque<point> snake;
-point food;
-int nfood;
-clock_t curr, last;
-WINDOW* gamew;
-int gw_w, gw_h;
 
 int main(void)
 {
@@ -84,7 +105,11 @@ int main(void)
 
 int start_game()
 {
-    float speed, secs;
+    /* new game state */
+    game_state state;
+    
+    /* auxiliary variables */
+    float secs;
     clock_t start;
     int ch;
     std::stringstream stream;
@@ -96,55 +121,55 @@ int start_game()
     }
 
     /* create window */
-    gw_w = COLS;
-    gw_h = LINES - 1;
-    gamew = newwin(gw_h, gw_w, 0, 0);
+    state.gw_w = COLS;
+    state.gw_h = LINES - 1;
+    state.gamew = newwin(state.gw_h, state.gw_w, 0, 0);
 
     /* initialize the map if any */
-    draw_map();
+    draw_map(&state);
 
     /* start player at [START_LEN,5] going right */
-    x = START_LEN + 1;
-    y = 2;
-    dir = RIGHT;
-    score = 0;
+    state.pos.x = START_LEN + 1;
+    state.pos.y = 2;
+    state.dir = RIGHT;
+    state.score = 0;
     start = clock();
 
     /* init snake */
-    wbkgd(gamew, COLOR_PAIR(3));
-    snake.clear();
+    wbkgd(state.gamew, COLOR_PAIR(3));
+    state.snake.clear();
     for(int i = 0; i < START_LEN; i++) {
-        point p = {x + 1 - START_LEN + i, y};
-        snake.push_front(p);
-        mvwaddch(gamew, p.y, p.x, SNAKE);
+        point p = {state.pos.x + 1 - START_LEN + i, state.pos.y};
+        state.snake.push_front(p);
+        mvwaddch(state.gamew, p.y, p.x, SNAKE);
     }
 
     /* init food */
-    create_food();
+    create_food(&state);
 
     refresh();
-    wrefresh(gamew);
+    wrefresh(state.gamew);
 
     /* frame rate is 1 second (speed) */
-    speed = 1.0;
+    state.speed = 1.0;
 
     /* clocks */
-    last = 0;
+    state.last = 0;
 
     /* async char read */
     nodelay(stdscr, TRUE);
     
     /* run */
-    running = 1;
+    state.running = true;
 
     do {
         /* update current time */
-        curr = clock();
+        state.curr = clock();
 
         /* print status */
-        secs = ((float)(curr - start) / CLOCKS_PER_SEC);
+        secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
         stream << std::fixed << std::setprecision(2) << secs;
-        std::string st = "  Score: " + std::to_string(score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: x" + std::to_string((int)(1.0F/speed));
+        std::string st = "  Score: " + std::to_string(state.score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: x" + std::to_string((int)(1.0F / state.speed));
         print_status(st.c_str());
 
         /* get char async, see nodelay() */
@@ -156,88 +181,88 @@ int start_game()
                 case KEY_UP:
                 case 'w':
                 case 'k':
-                    if(dir != DOWN)
-                        do_chdir(y - 1, x, UP, DOWN);
+                    if(state.dir != DOWN)
+                        do_chdir(&state, state.pos.y - 1, state.pos.x, UP, DOWN);
                     break;
                 case KEY_DOWN:
                 case 's':
                 case 'j':
-                    if(dir != UP)
-                        do_chdir(y + 1, x, DOWN, UP);
+                    if(state.dir != UP)
+                        do_chdir(&state, state.pos.y + 1, state.pos.x, DOWN, UP);
                     break;
                 case KEY_LEFT:
                 case 'a':
                 case 'h':
-                    if(dir != RIGHT)
-                        do_chdir(y, x - 1, LEFT, RIGHT);
+                    if(state.dir != RIGHT)
+                        do_chdir(&state, state.pos.y, state.pos.x - 1, LEFT, RIGHT);
                     break;
                 case KEY_RIGHT:
                 case 'd':
                 case 'l':
-                    if(dir != LEFT)
-                        do_chdir(y, x + 1, RIGHT, LEFT);
+                    if(state.dir != LEFT)
+                        do_chdir(&state, state.pos.y, state.pos.x + 1, RIGHT, LEFT);
                     break;
                 case 'q':
                     // quit
-                    running = 0;
-                    curr = last = clock();
+                    state.running = false;
+                    state.curr = state.last = clock();
                     break;
                 case '+':
-                    speed = std::clamp(speed / 2.0F, 0.03125F, 1.0F);
-                    curr = last = clock();
+                    if(speed_up(&state))
+                        state.curr = state.last = clock();
                     break;
                 case '-':
-                    speed = std::clamp(speed * 2.0F, 0.03125F, 1.0F);
-                    curr = last = clock();
+                    if(speed_down(&state))
+                        state.curr = state.last = clock();
                     break;
             }
         }
         
-        float dt = ((float)(curr - last) / CLOCKS_PER_SEC);
-        if (dt > speed) {
-            last = curr;
+        float dt = ((float)(state.curr - state.last) / CLOCKS_PER_SEC);
+        if (dt > state.speed) {
+            state.last = state.curr;
             /* auto-move */
-            switch (dir) {
+            switch (state.dir) {
                 case UP:
-                    y--;
+                    state.pos.y--;
                     break;
                 case DOWN:
-                    y++;
+                    state.pos.y++;
                     break;
                 case RIGHT:
-                    x++;
+                    state.pos.x++;
                     break;
                 case LEFT:
-                    x--;
+                    state.pos.x--;
                     break;
             }
-            if(is_move_hit(y, x)) {
+            if(is_move_hit(&state, state.pos.y, state.pos.x)) {
                 /* end */
-                running = 0;
+                state.running = false;
                 break;
             } else {
                 /* update */
-                update(x, y);
+                update(&state, state.pos.y, state.pos.x);
             }
         }
         
         /* chech food */
-        if(food.x == x && food.y == y){
-            create_food();
-            nfood = 1;
-            score++;
-            if (score % 20 == 0)
-                speed = std::clamp(speed / 2.0F, 0.03125F, 1.0F);
+        if(state.food.x == state.pos.x && state.food.y == state.pos.y){
+            create_food(&state);
+            state.f_eat = true;
+            state.score++;
+            if (state.score % 20 == 0)
+                speed_up(&state);
         }
 
         
         /* refresh */
-        wbkgd(gamew, COLOR_PAIR(5));
-        box(gamew, 0, 0);
-        wrefresh(gamew);
+        wbkgd(state.gamew, COLOR_PAIR(5));
+        box(state.gamew, 0, 0);
+        wrefresh(state.gamew);
         refresh();
     }
-    while (running);
+    while (state.running);
 
     /* done */
     std::string msg0 = "The game has finished";
@@ -282,56 +307,71 @@ void print_status(const char* status)
     refresh();
 }
 
-point rd()
+point rd(game_state* state)
 {
     point c;
     while(1){
-        c.x = rand() % (gw_w - 2) + 1;
-        c.y = rand() % (gw_h - 2) + 1;
+        c.x = rand() % (state->gw_w - 2) + 1;
+        c.y = rand() % (state->gw_h - 2) + 1;
 
-        int what = mvwinch(gamew, c.y, c.x) & A_CHARTEXT;
-        if(what == EMPTY)
+        if((mvwinch(state->gamew, c.y, c.x) & A_CHARTEXT) == EMPTY)
             return c;
     }
 }
 
-void create_food()
+void create_food(game_state* state)
 {
-    point newp = rd();
-    food.x = newp.x;
-    food.y = newp.y;
-    wbkgd(gamew, COLOR_PAIR(2));
-    mvwaddch(gamew, food.y, food.x, FOOD);
-    
+    point newp = rd(state);
+    state->food.x = newp.x;
+    state->food.y = newp.y;
+    wbkgd(state->gamew, COLOR_PAIR(2));
+    mvwaddch(state->gamew, state->food.y, state->food.x, FOOD);
 }
 
-void update(int x, int y)
+void update(game_state* state, int newy, int newx)
 {
-    wbkgd(gamew, COLOR_PAIR(3));
-    point newpoint = {x, y};
-    snake.push_front(newpoint);
-    mvwaddch(gamew, y, x, SNAKE);
-    if(!nfood){
-        point erase = snake.back();
-        snake.pop_back();
-        mvwaddch(gamew, erase.y, erase.x, EMPTY);
+    wbkgd(state->gamew, COLOR_PAIR(3));
+    point newpoint = {newx, newy};
+    state->snake.push_front(newpoint);
+    mvwaddch(state->gamew, newy, newx, SNAKE);
+    if(!state->f_eat){
+        point erase = state->snake.back();
+        state->snake.pop_back();
+        mvwaddch(state->gamew, erase.y, erase.x, EMPTY);
     }else{
-        nfood = 0;
+        state->f_eat = false;
     }
-    move(y, x);
+    move(state->pos.y, state->pos.x);
 }
 
-void do_chdir(int newy, int newx, int newdir, int opposite_dir)
+void do_chdir(game_state* state, int newy, int newx, int newdir, int opposite_dir)
 {
-    if (!is_move_hit(newy, newx)) {
-        update(newx, newy);
-        x = newx;
-        y = newy;
-        dir = newdir;
-        curr = last = clock();
-    } else if (dir != opposite_dir){
-        running = 0;
+    if (!is_move_hit(state, newy, newx)) {
+        update(state, newy, newx);
+        state->pos.x = newx;
+        state->pos.y = newy;
+        state->dir = newdir;
+        state->curr = state->last = clock();
+    } else if (state->dir != opposite_dir){
+        state->running = false;
     }
+}
+
+bool speed_up(game_state* state)
+{
+    return speed_scl(state, 0.5);
+}
+
+bool speed_down(game_state* state)
+{
+    return speed_scl(state, 2.0);
+}
+
+bool speed_scl(game_state* state, float scale)
+{
+    float cpy = state->speed;
+    state->speed = std::clamp(state->speed * scale, 0.03125F, 1.0F);
+    return cpy != state->speed;
 }
 
 void print_bottom(const char* text)
@@ -340,22 +380,22 @@ void print_bottom(const char* text)
     printw(text);
 }
 
-int out_of_bounds(int y, int x)
+int out_of_bounds(game_state* state, int y, int x)
 {
-    return y <= 0 || x <= 0 || y >= gw_h - 1 || x >= gw_w - 1;
+    return y <= 0 || x <= 0 || y >= state->gw_h - 1 || x >= state->gw_w - 1;
 }
 
-int is_move_hit(int y, int x)
+int is_move_hit(game_state* state, int y, int x)
 {
-    int testch = mvwinch(gamew, y, x) & A_CHARTEXT;
-    return testch == SNAKE || out_of_bounds(y, x);
+    int testch = mvwinch(state->gamew, y, x) & A_CHARTEXT;
+    return testch == SNAKE || out_of_bounds(state, y, x);
 }
 
-void draw_map(void)
+void draw_map(game_state* state)
 {
     int y;
     for (y = 0; y < LINES; y++) {
-        mvwhline(gamew, y, 0, EMPTY, COLS);
+        mvwhline(state->gamew, y, 0, EMPTY, COLS);
     }
 }
 
