@@ -20,7 +20,7 @@ tsnake.1: tsnake
 	help2man --include tsnake.h2m -o tsnake.1 ./tsnake
 
 .PHONY: install
-install: tsnake tsnake.1
+install: tsnake
 	mkdir -p $(INSTALL_PATH)/man/man1/
 	cp tsnake.1 $(INSTALL_PATH)/man/man1/
 	mkdir -p $(INSTALL_PATH)/bin/
