@@ -6,16 +6,21 @@
 #include <algorithm>
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
+#include <stdexcept>
 
 #include <curses.h>
 #include <stdlib.h>
 #include <time.h>
 
+#include "InputParser.h"
+
 /* defines */
+#define VERSION     "0.1.0"
+
 #define EMPTY  	    ' '
 #define SNAKE       '#'
 #define FOOD        'O'
-#define WALL        '/'
+#define WALL        '#'
 
 #define UP          0
 #define DOWN        1
@@ -26,6 +31,10 @@
 
 #define ALIGN_RIGHT 0
 #define ALIGN_LEFT  1
+
+#define R_QUIT            0
+#define R_RESTART_NEW     1
+#define R_RESTART_SAME    2
 
 /* structs */
 struct point {
@@ -61,32 +70,102 @@ struct game_state {
 void update(game_state* state, int newy, int newx);
 void do_chdir(game_state* state, int newy, int newx, int newdir, int opposite_dir);
 int out_of_boudns(game_state* state, int y, int x);
-int is_move_hit(game_state* state, int y, int x);
-void draw_map(game_state* state);
+int collision_check(game_state* state, int y, int x);
+void draw_map(game_state* state, int map);
 void print_bottom(char* text);
 void create_food(game_state* state);
 void print_status(std::string status, int align, int col);
 int ask_end();
 bool speed_scl(game_state* state, float scale);
+bool speed_add(game_state* state, float add);
 bool speed_up(game_state* state);
 bool speed_down(game_state* state);
-int start_game();
+int start_game(int start_length, int map);
 
+/* global variables */
+bool cheat;
+
+/* color locations */
 #define C_DEFAULT 1
 #define C_FOOD    2
 #define C_SNAKE   3
 #define C_STATUS  4
 #define C_BORDER  5
 #define C_GREEN   6
+#define C_WALL    7
 
-int main(void)
+int main(int argc, char** argv)
 {
+    InputParser ip(argc, argv);
+    if(ip.exists("-h")){
+        std::cout << "tsnake version " << VERSION << std::endl;
+        std::cout << std::endl;
+        std::cout << "tsnake is a simple terminal snake game written in C++ with ncurses." << std::endl;
+        std::cout << "Move the snake with the arrows, with wasd or with vim keys (hjkl)." << std::endl;
+        std::cout << "It starts with a speed of 1 cells/sec and every 20 points the speed" << std::endl;
+        std::cout << "is increased by one until the maximum speed of 15 cells/sec is reached." << std::endl;
+        std::cout << "The speed can be increased (+) and decreased (-) during gameplay if" << std::endl;
+        std::cout << "cheat mode is enabled." << std::endl;
+        std::cout << "The game has a few maps which can be activated using the -m option." << std::endl;
+        std::cout << "Maps are cycled automatically when the game is restarted." << std::endl;
+        std::cout << std::endl;
+        std::cout << "Usage: tsnake [OPTION]..." << std::endl;
+        std::cout << std::endl;
+        std::cout << "Options:" << std::endl;
+        std::cout << " -h";
+        std::cout << "\t\tshows usage information" << std::endl;
+        std::cout << " -v";
+        std::cout << "\t\tprints version and exit" << std::endl;
+        std::cout << " -n [SIZE]";
+        std::cout << "\tset inital size of snake, which defaults to " << START_LEN << std::endl;
+        std::cout << " -m [MAP_NUM]";
+        std::cout << "\tnumber of the first map to use as an integer, which is cycled\n\t\tusing (map \% nmaps)" << std::endl;
+        std::cout << " -c";
+        std::cout << "\t\tdeactivate colors" << std::endl;
+        std::cout << " -x, --cheat";
+        std::cout << "\tactivate cheat mode where speed can be increased and\n\t\tdecreased with '+' and '-'" << std::endl;
+        return 0;
+    }
+    if(ip.exists("-v")){
+        std::cout << "tsnake version " << VERSION << std::endl;
+        return 0;
+    }
+
+    /* initial snake length */
+    int start_length = START_LEN;
+    if(ip.exists("-n")){
+        try{
+            start_length = ip.getInt("-n");
+        }catch(const std::invalid_argument& ia){
+            std::cout << "Bad argument: n = '" << ip.getStr("-n") << "', must be an integer" << std::endl;
+            return 0;
+        }
+    }
+    
+    /* first map */
+    int first_map = 1;
+    if(ip.exists("-m")){
+        try{
+            first_map = ip.getInt("-m");
+        }catch(const std::invalid_argument& ia){
+            std::cout << "Bad argument: m = '" << ip.getStr("-m") << "', must be an integer" << std::endl;
+            return 0;
+        }
+    }
+
+    /* cheat mode */
+    cheat = ip.exists("--cheat") || ip.exists("-x");
+
+    /* colors */
+    bool colors = !ip.exists("-c");
+
     /* init random */
     srand(time(NULL));
 
     /* initialize curses */
     initscr();
-    start_color();
+    if(colors)
+        start_color();
     keypad(stdscr, TRUE);
     cbreak();
     noecho();
@@ -97,18 +176,27 @@ int main(void)
     init_pair(C_DEFAULT, COLOR_WHITE, COLOR_BLACK);
     init_pair(C_BORDER, COLOR_BLUE, COLOR_BLACK);
     init_pair(C_GREEN, COLOR_GREEN, COLOR_BLACK);
+    init_pair(C_WALL, COLOR_BLACK, COLOR_RED);
     
     clear();
     
     /* start the game */
-    while(start_game()){}
+    start_length = std::clamp(start_length, 1, (COLS - 5) / 2);
+
+    int ret = start_game(start_length, first_map);
+    while(ret != R_QUIT){
+        if(ret == R_RESTART_SAME)
+            ret = start_game(start_length, first_map);
+        else if(ret == R_RESTART_NEW)
+            ret = start_game(start_length, ++first_map);
+    }
 
     /* clean up */
     endwin();
     exit(0);
 }
 
-int start_game()
+int start_game(int start_length, int map)
 {
     /* new game state */
     game_state state;
@@ -117,7 +205,6 @@ int start_game()
     float secs;
     clock_t start;
     int ch;
-    std::stringstream stream;
 
     if(LINES < 10 || COLS < 35){
         endwin();
@@ -131,10 +218,10 @@ int start_game()
     state.gamew = newwin(state.gw_h, state.gw_w, 0, 0);
 
     /* initialize the map if any */
-    draw_map(&state);
+    draw_map(&state, map);
 
-    /* start player at [START_LEN,5] going right */
-    state.pos.x = START_LEN + 1;
+    /* start player at [start_length,5] going right */
+    state.pos.x = start_length + 1;
     state.pos.y = 2;
     state.dir = RIGHT;
     state.score = 0;
@@ -143,8 +230,8 @@ int start_game()
     /* init snake */
     wattron(state.gamew, COLOR_PAIR(C_SNAKE));
     state.snake.clear();
-    for(int i = 0; i < START_LEN; i++) {
-        point p = {state.pos.x + 1 - START_LEN + i, state.pos.y};
+    for(int i = 0; i < start_length; i++) {
+        point p = {state.pos.x + 1 - start_length + i, state.pos.y};
         state.snake.push_front(p);
         mvwaddch(state.gamew, p.y, p.x, SNAKE);
     }
@@ -156,7 +243,7 @@ int start_game()
     refresh();
     wrefresh(state.gamew);
 
-    /* frame rate is 1 second (speed) */
+    /* speed in cells/sec */
     state.speed = 1.0;
 
     /* clocks */
@@ -176,11 +263,12 @@ int start_game()
         mvhline(LINES - 1, 0, EMPTY, COLS);
         
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-        stream << std::fixed << std::setprecision(2) << secs;
-        std::string st = "  Score: " + std::to_string(state.score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: x" + std::to_string((int)(1.0F / state.speed));
+        std::stringstream stream;
+        stream << std::fixed << std::setprecision(2) << state.speed;
+        std::string st = "  Score: " + std::to_string(state.score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: " + stream.str() + " cells/s";
 
         print_status(st, ALIGN_LEFT, C_STATUS);
-        print_status("(q) end game", ALIGN_RIGHT, C_DEFAULT);
+        print_status("r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
 
         /* get char async, see nodelay() */
         ch = getch();
@@ -213,23 +301,27 @@ int start_game()
                         do_chdir(&state, state.pos.y, state.pos.x + 1, RIGHT, LEFT);
                     break;
                 case 'q':
-                    // quit
+                    // show quit action
                     state.running = false;
                     state.curr = state.last = clock();
                     break;
+                case 'r':
+                    // restart
+                    return R_RESTART_NEW;
                 case '+':
-                    if(speed_up(&state))
+                    if(cheat && speed_up(&state))
                         state.curr = state.last = clock();
                     break;
                 case '-':
-                    if(speed_down(&state))
+                    if(cheat && speed_down(&state))
                         state.curr = state.last = clock();
                     break;
             }
         }
         
         float dt = ((float)(state.curr - state.last) / CLOCKS_PER_SEC);
-        if (dt > state.speed) {
+        float secs_per_cell = 1.0F / state.speed;
+        if (dt > secs_per_cell) {
             state.last = state.curr;
             /* auto-move */
             switch (state.dir) {
@@ -246,7 +338,7 @@ int start_game()
                     state.pos.x--;
                     break;
             }
-            if(is_move_hit(&state, state.pos.y, state.pos.x)) {
+            if(collision_check(&state, state.pos.y, state.pos.x)) {
                 /* end */
                 state.running = false;
                 break;
@@ -279,24 +371,29 @@ int start_game()
 
     /* done */
     std::string msg3 = "YOUR SCORE: " + std::to_string(state.score);
-    std::string msg0 = "The game has finished, quit?";
-    std::string msg1 = "(y|q)      Quit";
-    std::string msg2 = "(n|r)      Restart game";
-    int minl = msg0.size() + 2;
+    std::string msg4 = "YOU LASTED: " + std::to_string((int) secs) + " seconds";
+    std::string msg1 = "r: Restart (new map)";
+    std::string msg0 = "s: Restart (same map)";
+    std::string msg2 = "q: Quit";
+    int minl = msg1.size();
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     nodelay(stdscr, FALSE);
 
-    /* score in green */
+    /* score and seconds in green */
     wattron(endw, COLOR_PAIR(C_GREEN));
-    mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - msg3.size() / 2, msg3.c_str());
+    mvwaddstr(endw, ew_h / 2 - 3, ew_w / 2 - msg3.size() / 2, msg3.c_str());
+    mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - msg4.size() / 2, msg4.c_str());
     wattroff(endw, COLOR_PAIR(C_GREEN));
 
-    mvwaddstr(endw, ew_h / 2, ew_w / 2 - minl / 2 + 1, msg0.c_str());
-    mvwaddstr(endw, ew_h / 2 + 2, ew_w / 2 - minl / 2 + 5, msg1.c_str());
-    mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2 + 5, msg2.c_str());
+    mvwaddstr(endw, ew_h / 2 + 1, ew_w / 2 - minl / 2, msg1.c_str());
+    mvwaddstr(endw, ew_h / 2 + 2, ew_w / 2 - minl / 2, msg0.c_str());
+    mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2, msg2.c_str());
+    
+    wattron(endw, COLOR_PAIR(C_GREEN));
     box(endw, 0, 0);
+    wattroff(endw, COLOR_PAIR(C_GREEN));
     
     wrefresh(endw);
    
@@ -308,13 +405,15 @@ int ask_end()
     int opt = getch();
 
     switch(opt){
-        case 'y':
-        case 'q':
-            return 0;
-        case 'n':
         case 'r':
-            // Restart
-            return 1;
+            /* new game, new map */
+            return R_RESTART_NEW;
+        case 's':
+            /* new game, same map */
+            return R_RESTART_SAME;
+        case 'q':
+            /* quit */
+            return R_QUIT;
         default:
             return ask_end();
     }
@@ -378,7 +477,7 @@ void update(game_state* state, int newy, int newx)
 
 void do_chdir(game_state* state, int newy, int newx, int newdir, int opposite_dir)
 {
-    if (!is_move_hit(state, newy, newx)) {
+    if (!collision_check(state, newy, newx)) {
         update(state, newy, newx);
         state->pos.x = newx;
         state->pos.y = newy;
@@ -391,18 +490,25 @@ void do_chdir(game_state* state, int newy, int newx, int newdir, int opposite_di
 
 bool speed_up(game_state* state)
 {
-    return speed_scl(state, 0.5);
+    return speed_add(state, 1.0);
 }
 
 bool speed_down(game_state* state)
 {
-    return speed_scl(state, 2.0);
+    return speed_add(state, -1.0);
 }
 
 bool speed_scl(game_state* state, float scale)
 {
     float cpy = state->speed;
-    state->speed = std::clamp(state->speed * scale, 0.03125F, 1.0F);
+    state->speed = std::clamp(state->speed * scale, 1.0F, 15.0F);
+    return cpy != state->speed;
+}
+
+bool speed_add(game_state* state, float add)
+{
+    float cpy = state->speed;
+    state->speed = std::clamp(state->speed + add, 1.0F, 15.0F);
     return cpy != state->speed;
 }
 
@@ -417,17 +523,46 @@ int out_of_bounds(game_state* state, int y, int x)
     return y <= 0 || x <= 0 || y >= state->gw_h - 1 || x >= state->gw_w - 1;
 }
 
-int is_move_hit(game_state* state, int y, int x)
+int collision_check(game_state* state, int y, int x)
 {
     int testch = mvwinch(state->gamew, y, x) & A_CHARTEXT;
-    return testch == SNAKE || out_of_bounds(state, y, x);
+    return testch == SNAKE || testch == WALL || out_of_bounds(state, y, x);
 }
 
-void draw_map(game_state* state)
+void draw_map(game_state* state, int map)
 {
+    int nmaps = 4;
+    map = map % nmaps;
     int y;
     for (y = 0; y < LINES; y++) {
-        mvwhline(state->gamew, y, 0, EMPTY, COLS);
+        mvwhline(state->gamew, y, 0, EMPTY, state->gw_w);
     }
+
+    /* actual map */
+    wattron(state->gamew, COLOR_PAIR(C_WALL));
+    switch(map){
+        case 0:
+            /* empty */
+            break;
+        case 1:
+            /* just one vertical wall */
+            mvwvline(state->gamew, 0, state->gw_w / 2, WALL, state->gw_h * 0.7); 
+            break;
+        case 2:
+            /* three walls */
+            mvwvline(state->gamew, 0, state->gw_w / 2, WALL, state->gw_h * 0.7); 
+            mvwhline(state->gamew, state->gw_h / 2, 0, WALL, state->gw_w * 0.3333); 
+            mvwhline(state->gamew, state->gw_h / 2, state->gw_w * 0.6666, WALL, state->gw_w * 0.3333 + 1); 
+            break;
+        case 3:
+            /* still three walls, centered */
+            int hl = state->gw_w * 0.7;
+            int vl = state->gw_h * 0.8;
+            mvwvline(state->gamew, (state->gw_h - vl) / 2, state->gw_w / 2, WALL, vl); 
+            mvwhline(state->gamew, state->gw_h * 0.3333, (state->gw_w - hl) / 2, WALL, hl); 
+            mvwhline(state->gamew, state->gw_h * 0.6666, (state->gw_w - hl) / 2, WALL, hl); 
+            break;
+    }
+    wattroff(state->gamew, COLOR_PAIR(C_WALL));
 }
 
