@@ -5,7 +5,7 @@ support for different maps.
 
 ![tsnake](https://raw.githubusercontent.com/langurmonkey/tsnake/master/img/tsnake.gif)
 
-Move the snake with the arrow keys, with `wasd` or with vi keys (`hjkl`).
+Move the snake using the arrow keys `↑↓←→`, `wasd` or vi's `hjkl`.
 The game starts with a speed of 1 cells/sec and every 20 points the speed
 is increased by one until the maximum speed of 15 cells/sec is reached.
 The speed can be increased with `+` and decreased with `-` during gameplay if
