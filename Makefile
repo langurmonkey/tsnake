@@ -1,9 +1,13 @@
 CPP=g++
 CC=gcc
 CFLAGS=-lncurses -Wall -g -std=c++17
-INSTALL_PATH=/usr/local
+PREFIX ?= /usr/local
+MANPREFIX ?= $(PREFIX)/share/man
+INSTALL ?= install
 
-default: tsnake 
+BIN = tsnake
+
+all: $(BIN) 
 
 tsnake: tsnake.o InputParser.o
 	$(CPP) tsnake.o InputParser.o -o tsnake $(CFLAGS)
@@ -16,21 +20,22 @@ InputParser.o: InputParser.cpp
 
 man: tsnake.1
 
-tsnake.1: tsnake
+tsnake.1: $(BIN)
 	help2man --include tsnake.h2m -o tsnake.1 ./tsnake
 
-.PHONY: install
-install: tsnake
-	mkdir -p $(INSTALL_PATH)/man/man1/
-	cp tsnake.1 $(INSTALL_PATH)/man/man1/
-	mkdir -p $(INSTALL_PATH)/bin/
-	cp tsnake $(INSTALL_PATH)/bin/
+install: all
+	$(INSTALL) -m 0755 -d $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -m 0755 -d $(DESTDIR)$(MANPREFIX)/man1
+	$(INSTALL) -m 0644 $(BIN).1 $(DESTDIR)$(MANPREFIX)/man1
 
-.PHONY: uninstall
 uninstall:
-	rm $(INSTALL_PATH)/man/man1/tsnake.1
-	rm $(INSTALL_PATH)/bin/tsnake
+	$(RM) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+	$(RM) $(DESTDIR)$(MANPREFIX)/man1/$(BIN).1
 
-.PHONY: clean
 clean:
-	rm -f tsnake *.o
+	$(RM) -f $(BIN) *.o
+
+skip: ;
+
+.PHONY: install uninstall clean
