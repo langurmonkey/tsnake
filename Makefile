@@ -23,7 +23,7 @@ man: tsnake.1
 tsnake.1: $(BIN)
 	help2man --include tsnake.h2m -o tsnake.1 ./tsnake
 
-install: all
+install: $(BIN) 
 	$(INSTALL) -m 0755 -d $(DESTDIR)$(PREFIX)/bin
 	$(INSTALL) -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin
 	$(INSTALL) -m 0755 -d $(DESTDIR)$(MANPREFIX)/man1

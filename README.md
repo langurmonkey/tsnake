@@ -16,7 +16,14 @@ Maps are cycled automatically when the game is restarted.
 
 ## Installation
 
-First clone the repository.
+If you are on **Arch Linux** or derivatives, use our [`tsnake`](https://aur.archlinux.org/packages/tsnake/) AUR package:
+
+```
+$  yay -S tsnake
+```
+You are done.
+
+If you are on **any other distro**, first clone the repository.
 
 ```
 $  git clone git@gitlab.com:langurmonkey/tsnake.git && cd tsnake
