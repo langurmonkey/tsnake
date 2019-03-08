@@ -1,8 +1,9 @@
 # tsnake, a terminal snake game
 
-`tsnake` is a terminal snake game written in C++ using the ncurses library.
+`tsnake` is a terminal snake game written in C++ using the ncurses library with
+support for different maps.
 
-<img src="https://i.imgur.com/exjW3td.jpg" alt="tsnake screenshot" width="500" />
+![tsnake](https://raw.githubusercontent.com/langurmonkey/tsnake/master/img/tsnake.gif)
 
 Move the snake with the arrow keys, with `wasd` or with vi keys (`hjkl`).
 The game starts with a speed of 1 cells/sec and every 20 points the speed
