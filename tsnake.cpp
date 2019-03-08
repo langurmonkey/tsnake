@@ -4,8 +4,6 @@
 #include <string>
 #include <deque>
 #include <algorithm>
-#include <iomanip> // setprecision
-#include <sstream> // stringstream
 #include <stdexcept>
 
 #include <curses.h>
@@ -15,11 +13,13 @@
 #include "InputParser.h"
 
 /* defines */
-#define VERSION     "0.1.0"
+#define VERSION     "0.1.1"
+
+#define N_MAPS      4
 
 #define EMPTY  	    ' '
-#define SNAKE       '#'
-#define FOOD        'O'
+#define SNAKE       'o'
+#define FOOD        'X'
 #define WALL        '#'
 
 #define UP          0
@@ -93,6 +93,7 @@ bool cheat;
 #define C_BORDER  5
 #define C_GREEN   6
 #define C_WALL    7
+#define C_SNAKE_H 8
 
 int main(int argc, char** argv)
 {
@@ -102,8 +103,8 @@ int main(int argc, char** argv)
         std::cout << std::endl;
         std::cout << "tsnake is a simple terminal snake game written in C++ with ncurses." << std::endl;
         std::cout << "Move the snake with the arrows, with wasd or with vim keys (hjkl)." << std::endl;
-        std::cout << "It starts with a speed of 1 cells/sec and every 20 points the speed" << std::endl;
-        std::cout << "is increased by one until the maximum speed of 15 cells/sec is reached." << std::endl;
+        std::cout << "It starts with a speed of 2 m/s and every 20 points the speed" << std::endl;
+        std::cout << "is increased by one until the maximum speed of 20 m/s is reached." << std::endl;
         std::cout << "The speed can be increased (+) and decreased (-) during gameplay if" << std::endl;
         std::cout << "cheat mode is enabled." << std::endl;
         std::cout << "The game has a few maps which can be activated using the -m option." << std::endl;
@@ -173,6 +174,7 @@ int main(int argc, char** argv)
     init_pair(C_STATUS, COLOR_YELLOW, COLOR_BLACK);
     init_pair(C_FOOD, COLOR_BLACK, COLOR_BLUE);
     init_pair(C_SNAKE, COLOR_RED, COLOR_GREEN);
+    init_pair(C_SNAKE_H, COLOR_GREEN, COLOR_RED);
     init_pair(C_DEFAULT, COLOR_WHITE, COLOR_BLACK);
     init_pair(C_BORDER, COLOR_BLUE, COLOR_BLACK);
     init_pair(C_GREEN, COLOR_GREEN, COLOR_BLACK);
@@ -237,14 +239,19 @@ int start_game(int start_length, int map)
     }
     wattroff(state.gamew, COLOR_PAIR(C_SNAKE));
 
+    wattron(state.gamew, COLOR_PAIR(C_SNAKE_H));
+    mvwaddch(state.gamew, state.snake.front().y, state.snake.front().x, SNAKE);
+    wattroff(state.gamew, COLOR_PAIR(C_SNAKE_H));
+
+
     /* init food */
     create_food(&state);
 
     refresh();
     wrefresh(state.gamew);
 
-    /* speed in cells/sec */
-    state.speed = 1.0;
+    /* speed in m/s */
+    state.speed = 2.0;
 
     /* clocks */
     state.last = 0;
@@ -263,9 +270,7 @@ int start_game(int start_length, int map)
         mvhline(LINES - 1, 0, EMPTY, COLS);
         
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-        std::stringstream stream;
-        stream << std::fixed << std::setprecision(2) << state.speed;
-        std::string st = "  Score: " + std::to_string(state.score) + "      Elapsed: " + std::to_string((int) secs) + " seconds      Speed: " + stream.str() + " cells/s";
+        std::string st = "  Score: " + std::to_string(state.score) + "  |  Time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
 
         print_status(st, ALIGN_LEFT, C_STATUS);
         print_status("r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
@@ -361,6 +366,8 @@ int start_game(int start_length, int map)
         /* refresh */
         wattron(state.gamew, COLOR_PAIR(C_BORDER));
         box(state.gamew, 0, 0);
+        std::string mapstr = " TSNAKE - MAP " + std::to_string(map % N_MAPS  + 1) + " ";
+        mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
         wattroff(state.gamew, COLOR_PAIR(C_BORDER));
 
 
@@ -372,9 +379,9 @@ int start_game(int start_length, int map)
     /* done */
     std::string msg3 = "YOUR SCORE: " + std::to_string(state.score);
     std::string msg4 = "YOU LASTED: " + std::to_string((int) secs) + " seconds";
-    std::string msg1 = "r: Restart (new map)";
-    std::string msg0 = "s: Restart (same map)";
-    std::string msg2 = "q: Quit";
+    std::string msg1 = "r:  restart (new map)";
+    std::string msg0 = "s:  restart (same map)";
+    std::string msg2 = "q:  quit";
     int minl = msg1.size();
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
@@ -459,12 +466,17 @@ void create_food(game_state* state)
 
 void update(game_state* state, int newy, int newx)
 {
+    point aux = state->snake.front();
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE));
+    mvwaddch(state->gamew, aux.y, aux.x, SNAKE);
+    wattroff(state->gamew, COLOR_PAIR(C_SNAKE));
+    
     point newpoint = {newx, newy};
     state->snake.push_front(newpoint);
 
-    wattron(state->gamew, COLOR_PAIR(C_SNAKE));
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE_H));
     mvwaddch(state->gamew, newy, newx, SNAKE);
-    wattroff(state->gamew, COLOR_PAIR(C_SNAKE));
+    wattroff(state->gamew, COLOR_PAIR(C_SNAKE_H));
     if(!state->f_eat){
         point erase = state->snake.back();
         state->snake.pop_back();
@@ -501,14 +513,14 @@ bool speed_down(game_state* state)
 bool speed_scl(game_state* state, float scale)
 {
     float cpy = state->speed;
-    state->speed = std::clamp(state->speed * scale, 1.0F, 15.0F);
+    state->speed = std::clamp(state->speed * scale, 1.0F, 20.0F);
     return cpy != state->speed;
 }
 
 bool speed_add(game_state* state, float add)
 {
     float cpy = state->speed;
-    state->speed = std::clamp(state->speed + add, 1.0F, 15.0F);
+    state->speed = std::clamp(state->speed + add, 1.0F, 20.0F);
     return cpy != state->speed;
 }
 
@@ -531,8 +543,7 @@ int collision_check(game_state* state, int y, int x)
 
 void draw_map(game_state* state, int map)
 {
-    int nmaps = 4;
-    map = map % nmaps;
+    map = map % N_MAPS;
     int y;
     for (y = 0; y < LINES; y++) {
         mvwhline(state->gamew, y, 0, EMPTY, state->gw_w);
