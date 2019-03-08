@@ -13,25 +13,33 @@ cheat mode (`--cheat`) is enabled.
 The game has a few maps which can be activated using the -m option.
 Maps are cycled automatically when the game is restarted.
 
-## Get it and build it
+## Installation
 
-Do this:
+First clone the repository.
 
 ```
-$  git clone git@gitlab.com:langurmonkey/tsnake.git
-$  cd tsnake
-$  make
+$  git clone git@gitlab.com:langurmonkey/tsnake.git && cd tsnake
 ```
+
+Then, build and install the software.
+
+```
+$  make && make install
+```
+
+You may need to run the `make install` as a superuser.
 
 ## Running
 
-Just run:
+To run the software, just do:
 
 ```
 $  tsnake
 ```
 
-## Usage and options
+## Usage
+
+Here is the info listed by the `--help` flag.
 
 ```
 Usage: tsnake [OPTION]...
@@ -45,4 +53,10 @@ Options:
  -c		deactivate colors
  -x, --cheat	activate cheat mode where speed can be increased and
 		decreased with '+' and '-'
+```
+
+Also, you can check out the man page after installing if you wish.
+
+```
+$  man tsnake
 ```

@@ -97,7 +97,7 @@ bool cheat;
 int main(int argc, char** argv)
 {
     InputParser ip(argc, argv);
-    if(ip.exists("-h")){
+    if(ip.exists("-h") || ip.exists("--help")){
         std::cout << "tsnake version " << VERSION << std::endl;
         std::cout << std::endl;
         std::cout << "tsnake is a simple terminal snake game written in C++ with ncurses." << std::endl;
@@ -112,9 +112,9 @@ int main(int argc, char** argv)
         std::cout << "Usage: tsnake [OPTION]..." << std::endl;
         std::cout << std::endl;
         std::cout << "Options:" << std::endl;
-        std::cout << " -h";
+        std::cout << " -h, --help";
         std::cout << "\t\tshows usage information" << std::endl;
-        std::cout << " -v";
+        std::cout << " -v, --version";
         std::cout << "\t\tprints version and exit" << std::endl;
         std::cout << " -n [SIZE]";
         std::cout << "\tset inital size of snake, which defaults to " << START_LEN << std::endl;
@@ -126,7 +126,7 @@ int main(int argc, char** argv)
         std::cout << "\tactivate cheat mode where speed can be increased and\n\t\tdecreased with '+' and '-'" << std::endl;
         return 0;
     }
-    if(ip.exists("-v")){
+    if(ip.exists("-v") || ip.exists("--version")){
         std::cout << "tsnake version " << VERSION << std::endl;
         return 0;
     }
