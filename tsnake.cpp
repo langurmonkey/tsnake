@@ -270,7 +270,7 @@ int start_game(int start_length, int map)
         mvhline(LINES - 1, 0, EMPTY, COLS);
         
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-        std::string st = "  Score: " + std::to_string(state.score) + "  |  Time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
+        std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
 
         print_status(st, ALIGN_LEFT, C_STATUS);
         print_status("r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
@@ -378,7 +378,7 @@ int start_game(int start_length, int map)
 
     /* done */
     std::string msg3 = "YOUR SCORE: " + std::to_string(state.score);
-    std::string msg4 = "YOU LASTED: " + std::to_string((int) secs) + " seconds";
+    std::string msg4 = "You lasted " + std::to_string((int) secs) + " seconds";
     std::string msg1 = "r:  restart (new map)";
     std::string msg0 = "s:  restart (same map)";
     std::string msg2 = "q:  quit";
