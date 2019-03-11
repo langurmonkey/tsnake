@@ -52,6 +52,8 @@ struct game_state {
     float speed;
     // are we running?
     bool running;
+    // game is paused
+    bool paused;
     // snake queue
     std::deque<point> snake;
     // current food position
@@ -142,7 +144,7 @@ int main(int argc, char** argv)
             return 0;
         }
     }
-    
+
     /* first map */
     int first_map = 1;
     if(ip.exists("-m")){
@@ -179,9 +181,9 @@ int main(int argc, char** argv)
     init_pair(C_BORDER, COLOR_BLUE, COLOR_BLACK);
     init_pair(C_GREEN, COLOR_GREEN, COLOR_BLACK);
     init_pair(C_WALL, COLOR_BLACK, COLOR_RED);
-    
+
     clear();
-    
+
     /* start the game */
     start_length = std::clamp(start_length, 1, (COLS - 5) / 2);
 
@@ -202,7 +204,7 @@ int start_game(int start_length, int map)
 {
     /* new game state */
     game_state state;
-    
+
     /* auxiliary variables */
     float secs;
     clock_t start;
@@ -244,6 +246,11 @@ int start_game(int start_length, int map)
     wattroff(state.gamew, COLOR_PAIR(C_SNAKE_H));
 
 
+    /* init pause window */
+    WINDOW* pausedw = newwin(6, 30, (LINES - 5) / 2,  (COLS - 30) / 2);
+    mvwaddstr(pausedw, 2, 9, "Game paused");
+    mvwaddstr(pausedw, 3, 5, "Press p to continue");
+
     /* init food */
     create_food(&state);
 
@@ -258,121 +265,137 @@ int start_game(int start_length, int map)
 
     /* async char read */
     nodelay(stdscr, TRUE);
-    
+
     /* run */
     state.running = true;
+    state.paused = false;
 
     do {
         /* update current time */
-        state.curr = clock();
+        if(!state.paused){
+            state.curr = clock();
 
-        /* print status */
-        mvhline(LINES - 1, 0, EMPTY, COLS);
-        
-        secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-        std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
+            /* print status */
+            mvhline(LINES - 1, 0, EMPTY, COLS);
 
-        print_status(st, ALIGN_LEFT, C_STATUS);
-        print_status("r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
+            secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
+            std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
 
-        /* get char async, see nodelay() */
-        ch = getch();
+            print_status(st, ALIGN_LEFT, C_STATUS);
+            print_status("p: pause   r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
 
-        /* test inputted key and determine direction */
-        if(ch != ERR){
-            switch (ch) {
-                case KEY_UP:
-                case 'w':
-                case 'k':
-                    if(state.dir != DOWN)
-                        do_chdir(&state, state.pos.y - 1, state.pos.x, UP, DOWN);
-                    break;
-                case KEY_DOWN:
-                case 's':
-                case 'j':
-                    if(state.dir != UP)
-                        do_chdir(&state, state.pos.y + 1, state.pos.x, DOWN, UP);
-                    break;
-                case KEY_LEFT:
-                case 'a':
-                case 'h':
-                    if(state.dir != RIGHT)
-                        do_chdir(&state, state.pos.y, state.pos.x - 1, LEFT, RIGHT);
-                    break;
-                case KEY_RIGHT:
-                case 'd':
-                case 'l':
-                    if(state.dir != LEFT)
-                        do_chdir(&state, state.pos.y, state.pos.x + 1, RIGHT, LEFT);
-                    break;
-                case 'q':
-                    // show quit action
+            /* get char async, see nodelay() */
+            ch = getch();
+
+            /* test inputted key and determine direction */
+            if(ch != ERR){
+                switch (ch) {
+                    case KEY_UP:
+                    case 'w':
+                    case 'k':
+                        if(state.dir != DOWN)
+                            do_chdir(&state, state.pos.y - 1, state.pos.x, UP, DOWN);
+                        break;
+                    case KEY_DOWN:
+                    case 's':
+                    case 'j':
+                        if(state.dir != UP)
+                            do_chdir(&state, state.pos.y + 1, state.pos.x, DOWN, UP);
+                        break;
+                    case KEY_LEFT:
+                    case 'a':
+                    case 'h':
+                        if(state.dir != RIGHT)
+                            do_chdir(&state, state.pos.y, state.pos.x - 1, LEFT, RIGHT);
+                        break;
+                    case KEY_RIGHT:
+                    case 'd':
+                    case 'l':
+                        if(state.dir != LEFT)
+                            do_chdir(&state, state.pos.y, state.pos.x + 1, RIGHT, LEFT);
+                        break;
+                    case 'q':
+                        // show quit action
+                        state.running = false;
+                        state.curr = state.last = clock();
+                        break;
+                    case 'p':
+                        // pause
+                        state.paused = true;
+                        break;
+                    case 'r':
+                        // restart
+                        return R_RESTART_NEW;
+                    case '+':
+                        if(cheat && speed_up(&state))
+                            state.curr = state.last = clock();
+                        break;
+                    case '-':
+                        if(cheat && speed_down(&state))
+                            state.curr = state.last = clock();
+                        break;
+                }
+            }
+
+            float dt = ((float)(state.curr - state.last) / CLOCKS_PER_SEC);
+            float secs_per_cell = 1.0F / state.speed;
+            if (dt > secs_per_cell) {
+                state.last = state.curr;
+                /* auto-move */
+                switch (state.dir) {
+                    case UP:
+                        state.pos.y--;
+                        break;
+                    case DOWN:
+                        state.pos.y++;
+                        break;
+                    case RIGHT:
+                        state.pos.x++;
+                        break;
+                    case LEFT:
+                        state.pos.x--;
+                        break;
+                }
+                if(collision_check(&state, state.pos.y, state.pos.x)) {
+                    /* end */
                     state.running = false;
-                    state.curr = state.last = clock();
                     break;
-                case 'r':
-                    // restart
-                    return R_RESTART_NEW;
-                case '+':
-                    if(cheat && speed_up(&state))
-                        state.curr = state.last = clock();
-                    break;
-                case '-':
-                    if(cheat && speed_down(&state))
-                        state.curr = state.last = clock();
-                    break;
+                } else {
+                    /* update */
+                    update(&state, state.pos.y, state.pos.x);
+                }
             }
-        }
-        
-        float dt = ((float)(state.curr - state.last) / CLOCKS_PER_SEC);
-        float secs_per_cell = 1.0F / state.speed;
-        if (dt > secs_per_cell) {
-            state.last = state.curr;
-            /* auto-move */
-            switch (state.dir) {
-                case UP:
-                    state.pos.y--;
-                    break;
-                case DOWN:
-                    state.pos.y++;
-                    break;
-                case RIGHT:
-                    state.pos.x++;
-                    break;
-                case LEFT:
-                    state.pos.x--;
-                    break;
-            }
-            if(collision_check(&state, state.pos.y, state.pos.x)) {
-                /* end */
-                state.running = false;
-                break;
-            } else {
-                /* update */
-                update(&state, state.pos.y, state.pos.x);
-            }
-        }
-        
-        /* chech food */
-        if(state.food.x == state.pos.x && state.food.y == state.pos.y){
-            create_food(&state);
-            state.f_eat = true;
-            state.score++;
-            if (state.score % 20 == 0)
-                speed_up(&state);
-        }
 
-        
-        /* refresh */
-        wattron(state.gamew, COLOR_PAIR(C_BORDER));
-        box(state.gamew, 0, 0);
-        std::string mapstr = " TSNAKE - MAP " + std::to_string(map % N_MAPS  + 1) + " ";
-        mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
-        wattroff(state.gamew, COLOR_PAIR(C_BORDER));
+            /* chech food */
+            if(state.food.x == state.pos.x && state.food.y == state.pos.y){
+                create_food(&state);
+                state.f_eat = true;
+                state.score++;
+                if (state.score % 20 == 0)
+                    speed_up(&state);
+            }
 
 
-        refresh();
-        wrefresh(state.gamew);
+            /* refresh */
+            wattron(state.gamew, COLOR_PAIR(C_BORDER));
+            box(state.gamew, 0, 0);
+            std::string mapstr = " TSNAKE - MAP " + std::to_string(map % N_MAPS  + 1) + " ";
+            mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
+            wattroff(state.gamew, COLOR_PAIR(C_BORDER));
+
+
+            refresh();
+            wrefresh(state.gamew);
+        }else{
+            // paused
+            ch = getch();
+            if(ch == 'p')
+                state.paused = false;
+
+            refresh();
+            box(pausedw, 0, 0);
+            wrefresh(pausedw);
+        }
     }
     while (state.running);
 
@@ -397,13 +420,13 @@ int start_game(int start_length, int map)
     mvwaddstr(endw, ew_h / 2 + 1, ew_w / 2 - minl / 2, msg1.c_str());
     mvwaddstr(endw, ew_h / 2 + 2, ew_w / 2 - minl / 2, msg0.c_str());
     mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2, msg2.c_str());
-    
+
     wattron(endw, COLOR_PAIR(C_GREEN));
     box(endw, 0, 0);
     wattroff(endw, COLOR_PAIR(C_GREEN));
-    
+
     wrefresh(endw);
-   
+
     return ask_end();
 }
 
@@ -470,7 +493,7 @@ void update(game_state* state, int newy, int newx)
     wattron(state->gamew, COLOR_PAIR(C_SNAKE));
     mvwaddch(state->gamew, aux.y, aux.x, SNAKE);
     wattroff(state->gamew, COLOR_PAIR(C_SNAKE));
-    
+
     point newpoint = {newx, newy};
     state->snake.push_front(newpoint);
 
