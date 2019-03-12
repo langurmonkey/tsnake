@@ -121,10 +121,13 @@ int main(int argc, char** argv)
         std::cout << "tsnake version " << VERSION << std::endl;
         std::cout << std::endl;
         std::cout << "tsnake is a simple terminal snake game written in C++ with ncurses." << std::endl;
-        std::cout << "Move the snake with the arrows, with wasd or with vim keys (hjkl)." << std::endl;
+        std::cout << "Move the snake with the arrows, with [wasd] or with vim keys [hjkl]." << std::endl;
+        std::cout << "Use [p] to pause the game, [r] to restart it with a new map and" << std::endl;
+        std::cout << "[q] to end the game and show the quit screen." << std::endl;
+        std::cout << std::endl;
         std::cout << "It starts with a speed of 2 m/s and every 20 points the speed" << std::endl;
         std::cout << "is increased by one until the maximum speed of 20 m/s is reached." << std::endl;
-        std::cout << "The speed can be increased (+) and decreased (-) during gameplay if" << std::endl;
+        std::cout << "The speed can be increased [+] and decreased [-] during gameplay if" << std::endl;
         std::cout << "cheat mode is enabled." << std::endl;
         std::cout << "The game has a few maps which can be activated using the -m option." << std::endl;
         std::cout << "Maps are cycled automatically when the game is restarted." << std::endl;
@@ -193,7 +196,7 @@ int main(int argc, char** argv)
     cbreak();
     noecho();
     curs_set(0);
-    init_pair(C_STATUS, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(C_STATUS, COLOR_BLACK, COLOR_CYAN);
     init_pair(C_FOOD, COLOR_CYAN, COLOR_MAGENTA);
     init_pair(C_SNAKE, COLOR_RED, COLOR_GREEN);
     init_pair(C_SNAKE_H, COLOR_GREEN, COLOR_RED);
@@ -410,13 +413,17 @@ int start_game(int start_length, int map)
         }
 
         /* status */
+        attron(COLOR_PAIR(C_STATUS));
         mvhline(LINES - 1, 0, EMPTY, COLS);
+        attroff(COLOR_PAIR(C_STATUS));
 
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-        std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
+        std::string st = "Score: " + std::to_string(state.score) + " | " + std::to_string((int) secs) + " seconds | " + std::to_string((int) state.speed) + " m/s";
 
-        print_status(st, ALIGN_LEFT, C_STATUS);
-        print_status("p: pause   r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
+        attron(A_BOLD);
+        print_status(" [p]Pause [r]Restart [q]Quit", ALIGN_LEFT, C_STATUS);
+        attroff(A_BOLD);
+        print_status(st, ALIGN_RIGHT, C_STATUS);
 
         
         /* title */
@@ -429,7 +436,7 @@ int start_game(int start_length, int map)
             mapstr.append(" - MAP " + std::to_string(map % N_MAPS  + 1) + "  (" + std::to_string(COLS) + "x" + std::to_string(LINES) + ") ");
             mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
         }else{
-            mvwaddstr(state.gamew, 0, 4, " GAME PAUSED - (p) to continue ");
+            mvwaddstr(state.gamew, 0, 4, " GAME PAUSED - [p]continue ");
         }
         wattroff(state.gamew, COLOR_PAIR(C_BORDER));
         
@@ -442,30 +449,28 @@ int start_game(int start_length, int map)
     /* done */
     std::string msg3 = "YOUR SCORE: " + std::to_string(state.score);
     std::string msg4 = "You lasted " + std::to_string((int) secs) + " seconds";
-    std::string msg1 = "r:  restart (new map)";
-    std::string msg0 = "s:  restart (same map)";
-    std::string msg2 = "q:  quit";
+    std::string msg1 = "[r] Restart (new map)";
+    std::string msg0 = "[s] Restart (same map)";
+    std::string msg2 = "[q] Quit";
     int minl = msg1.size();
     int ew_w = std::clamp(COLS / 2, minl, COLS);
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
+    wbkgd(endw, COLOR_PAIR(C_STATUS));
     nodelay(stdscr, FALSE);
     box(endw, 0, 0);
 
     /* title */
     mvwaddstr(endw, 0, 2, " GAME FINISHED ");
     /* score and seconds in green */
-    wattron(endw, COLOR_PAIR(C_GREEN));
     mvwaddstr(endw, ew_h / 2 - 3, ew_w / 2 - msg3.size() / 2, msg3.c_str());
     mvwaddstr(endw, ew_h / 2 - 2, ew_w / 2 - msg4.size() / 2, msg4.c_str());
-    wattroff(endw, COLOR_PAIR(C_GREEN));
 
+    wattron(endw, A_BOLD);
     mvwaddstr(endw, ew_h / 2 + 1, ew_w / 2 - minl / 2, msg1.c_str());
     mvwaddstr(endw, ew_h / 2 + 2, ew_w / 2 - minl / 2, msg0.c_str());
     mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2, msg2.c_str());
-
-    wattron(endw, COLOR_PAIR(C_GREEN));
-    wattroff(endw, COLOR_PAIR(C_GREEN));
+    wattroff(endw, A_BOLD);    
 
     wrefresh(endw);
 
