@@ -5,6 +5,7 @@
 #include <deque>
 #include <algorithm>
 #include <stdexcept>
+#include <cmath>
 
 #include <curses.h>
 #include <stdlib.h>
@@ -15,12 +16,13 @@
 /* defines */
 #define VERSION     "0.1.1"
 
-#define N_MAPS      4
+#define N_MAPS      5
 
 #define EMPTY  	    ' '
 #define SNAKE       'o'
 #define FOOD        'X'
 #define WALL        '#'
+#define WATER       '^'
 
 #define UP          0
 #define DOWN        1
@@ -40,6 +42,9 @@
 struct point {
     int x, y;
 };
+struct pointf {
+    float x, y;
+};
 
 struct game_state {
     // current position of the head of the snake
@@ -58,6 +63,8 @@ struct game_state {
     std::deque<point> snake;
     // current food position
     point food;
+    // current food relative position
+    pointf food_rel;
     // flag that goes up when we eat
     bool f_eat;
     // timers
@@ -78,6 +85,8 @@ void print_bottom(char* text);
 void create_food(game_state* state);
 void print_status(std::string status, int align, int col);
 int ask_end();
+void redraw_entities(game_state* state);
+void term_size_check();
 bool speed_scl(game_state* state, float scale);
 bool speed_add(game_state* state, float add);
 bool speed_up(game_state* state);
@@ -96,6 +105,7 @@ bool cheat;
 #define C_GREEN   6
 #define C_WALL    7
 #define C_SNAKE_H 8
+#define C_WATER   9
 
 int main(int argc, char** argv)
 {
@@ -146,7 +156,7 @@ int main(int argc, char** argv)
     }
 
     /* first map */
-    int first_map = 1;
+    int first_map = 0;
     if(ip.exists("-m")){
         try{
             first_map = ip.getInt("-m");
@@ -167,20 +177,24 @@ int main(int argc, char** argv)
 
     /* initialize curses */
     initscr();
-    if(colors)
+    if(colors){
         start_color();
+        // use default colors to not break current color scheme
+        use_default_colors();
+    }
     keypad(stdscr, TRUE);
     cbreak();
     noecho();
     curs_set(0);
     init_pair(C_STATUS, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(C_FOOD, COLOR_BLACK, COLOR_BLUE);
+    init_pair(C_FOOD, COLOR_CYAN, COLOR_MAGENTA);
     init_pair(C_SNAKE, COLOR_RED, COLOR_GREEN);
     init_pair(C_SNAKE_H, COLOR_GREEN, COLOR_RED);
     init_pair(C_DEFAULT, COLOR_WHITE, COLOR_BLACK);
     init_pair(C_BORDER, COLOR_BLUE, COLOR_BLACK);
     init_pair(C_GREEN, COLOR_GREEN, COLOR_BLACK);
     init_pair(C_WALL, COLOR_BLACK, COLOR_RED);
+    init_pair(C_WATER, COLOR_BLACK, COLOR_BLUE);
 
     clear();
 
@@ -200,6 +214,15 @@ int main(int argc, char** argv)
     exit(0);
 }
 
+void term_size_check(){
+    if(LINES < 15 || COLS < 60){
+        clear();
+        endwin();
+        std::cout << "Terminal too small! (min [60,15], current [" << COLS << "," << LINES << "]" << std::endl;
+        exit(0);
+    }
+}
+
 int start_game(int start_length, int map)
 {
     /* new game state */
@@ -210,11 +233,7 @@ int start_game(int start_length, int map)
     clock_t start;
     int ch;
 
-    if(LINES < 10 || COLS < 35){
-        endwin();
-        std::cout << "Terminal too small! (min [35,10], current [" << COLS << "," << LINES << "]" << std::endl;
-        exit(0);
-    }
+    term_size_check();
 
     /* create window */
     state.gw_w = COLS;
@@ -245,12 +264,6 @@ int start_game(int start_length, int map)
     mvwaddch(state.gamew, state.snake.front().y, state.snake.front().x, SNAKE);
     wattroff(state.gamew, COLOR_PAIR(C_SNAKE_H));
 
-
-    /* init pause window */
-    WINDOW* pausedw = newwin(6, 30, (LINES - 5) / 2,  (COLS - 30) / 2);
-    mvwaddstr(pausedw, 2, 9, "Game paused");
-    mvwaddstr(pausedw, 3, 5, "Press p to continue");
-
     /* init food */
     create_food(&state);
 
@@ -270,19 +283,23 @@ int start_game(int start_length, int map)
     state.running = true;
     state.paused = false;
 
+    bool resize = false;
+
     do {
-        /* update current time */
-        if(!state.paused){
+        resize = state.gw_w != COLS || state.gw_h != LINES - 1;
+        if(resize){
+            term_size_check();
+            state.gw_w = COLS;
+            state.gw_h = LINES - 1;
+            wresize(state.gamew, state.gw_h, state.gw_w);
+
+            draw_map(&state, map);
+            redraw_entities(&state); 
+
+            wrefresh(state.gamew);
+        } else if(!state.paused){
             state.curr = clock();
 
-            /* print status */
-            mvhline(LINES - 1, 0, EMPTY, COLS);
-
-            secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
-            std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
-
-            print_status(st, ALIGN_LEFT, C_STATUS);
-            print_status("p: pause   r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
 
             /* get char async, see nodelay() */
             ch = getch();
@@ -376,26 +393,42 @@ int start_game(int start_length, int map)
             }
 
 
-            /* refresh */
-            wattron(state.gamew, COLOR_PAIR(C_BORDER));
-            box(state.gamew, 0, 0);
-            std::string mapstr = " TSNAKE - MAP " + std::to_string(map % N_MAPS  + 1) + " ";
-            mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
-            wattroff(state.gamew, COLOR_PAIR(C_BORDER));
 
-
-            refresh();
-            wrefresh(state.gamew);
         }else{
             // paused
             ch = getch();
-            if(ch == 'p')
+            if(ch == 'p'){
                 state.paused = false;
-
-            refresh();
-            box(pausedw, 0, 0);
-            wrefresh(pausedw);
+            }    
         }
+
+        /* status */
+        mvhline(LINES - 1, 0, EMPTY, COLS);
+
+        secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
+        std::string st = "  Score: " + std::to_string(state.score) + "  |  Play time: " + std::to_string((int) secs) + " seconds  |  Speed: " + std::to_string((int) state.speed) + " m/s";
+
+        print_status(st, ALIGN_LEFT, C_STATUS);
+        print_status("p: pause   r: restart   q: end game", ALIGN_RIGHT, C_DEFAULT);
+
+        
+        /* title */
+        wattron(state.gamew, COLOR_PAIR(C_BORDER));
+        box(state.gamew, 0, 0);
+        if(!state.paused) {
+            std::string mapstr;
+            mapstr.append(" TSNAKE ");
+            mapstr.append(VERSION);
+            mapstr.append(" - MAP " + std::to_string(map % N_MAPS  + 1) + "  (" + std::to_string(COLS) + "x" + std::to_string(LINES) + ") ");
+            mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
+        }else{
+            mvwaddstr(state.gamew, 0, 4, " GAME PAUSED - (p) to continue ");
+        }
+        wattroff(state.gamew, COLOR_PAIR(C_BORDER));
+        
+        /* refresh */
+        refresh();
+        wrefresh(state.gamew);
     }
     while (state.running);
 
@@ -410,7 +443,10 @@ int start_game(int start_length, int map)
     int ew_h = std::clamp(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     nodelay(stdscr, FALSE);
+    box(endw, 0, 0);
 
+    /* title */
+    mvwaddstr(endw, 0, 2, " GAME FINISHED ");
     /* score and seconds in green */
     wattron(endw, COLOR_PAIR(C_GREEN));
     mvwaddstr(endw, ew_h / 2 - 3, ew_w / 2 - msg3.size() / 2, msg3.c_str());
@@ -422,7 +458,6 @@ int start_game(int start_length, int map)
     mvwaddstr(endw, ew_h / 2 + 3, ew_w / 2 - minl / 2, msg2.c_str());
 
     wattron(endw, COLOR_PAIR(C_GREEN));
-    box(endw, 0, 0);
     wattroff(endw, COLOR_PAIR(C_GREEN));
 
     wrefresh(endw);
@@ -465,6 +500,34 @@ void print_status(std::string status, int align, int col)
     attroff(COLOR_PAIR(col));
 }
 
+void redraw_entities(game_state* state){
+    /* snake */
+    
+    // head
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE_H));
+    mvwaddch(state->gamew, state->snake[0].y, state->snake[0].x, SNAKE);
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE_H));
+
+    // body
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE));
+    for(unsigned int i = 1; i < state->snake.size(); i++){
+        mvwaddch(state->gamew, state->snake[i].y, state->snake[i].x, SNAKE);
+    }
+    wattron(state->gamew, COLOR_PAIR(C_SNAKE));
+
+
+    /* food */
+    
+    // reposition
+    state->food.x = (int) round((float) state->gw_w * state->food_rel.x);
+    state->food.y = (int) round((float) state->gw_h * state->food_rel.y);
+
+    // draw
+    wattron(state->gamew, COLOR_PAIR(C_FOOD));
+    mvwaddch(state->gamew, state->food.y, state->food.x, FOOD);
+    wattroff(state->gamew, COLOR_PAIR(C_FOOD));
+}
+
 point rd(game_state* state)
 {
     point c;
@@ -482,6 +545,8 @@ void create_food(game_state* state)
     point newp = rd(state);
     state->food.x = newp.x;
     state->food.y = newp.y;
+    state->food_rel.x = (float) newp.x / (float) state->gw_w;
+    state->food_rel.y = (float) newp.y / (float) state->gw_h;
     wattron(state->gamew, COLOR_PAIR(C_FOOD));
     mvwaddch(state->gamew, state->food.y, state->food.x, FOOD);
     wattroff(state->gamew, COLOR_PAIR(C_FOOD));
@@ -576,19 +641,68 @@ void draw_map(game_state* state, int map)
     wattron(state->gamew, COLOR_PAIR(C_WALL));
     switch(map){
         case 0:
-            /* empty */
+            {
+            /* small pool with a fence */
+            
+            // pool
+            wattroff(state->gamew, COLOR_PAIR(C_WALL));
+            wattron(state->gamew, COLOR_PAIR(C_WATER));
+            for(int y = state->gw_h * 0.4; y <= state->gw_h * 0.6; y++){
+                mvwhline(state->gamew, y, state->gw_w / 3, WATER, state->gw_w / 3); 
+            }
+            wattroff(state->gamew, COLOR_PAIR(C_WATER));
+            wattron(state->gamew, COLOR_PAIR(C_WALL));
+
+            // 5 fences
+            int tx = state->gw_w * 0.2; 
+            int ty = state->gw_h * 0.2;
+            int bx = state->gw_w * 0.8;
+            int by = state->gw_h * 0.8;
+
+            mvwvline(state->gamew, ty, tx, WALL, by - ty);
+            mvwvline(state->gamew, ty, bx, WALL, by - ty);
+
+            mvwhline(state->gamew, by, tx, WALL, bx - tx + 1);
+            mvwhline(state->gamew, ty, tx, WALL, state->gw_w * 0.21);
+            mvwhline(state->gamew, ty, state->gw_w * 0.6, WALL, state->gw_w * 0.21);
+            
             break;
+            }
         case 1:
+            {
+            /* two walls with a pool in the middle */
+
+            // pool
+            wattroff(state->gamew, COLOR_PAIR(C_WALL));
+            wattron(state->gamew, COLOR_PAIR(C_WATER));
+            for(int y = state->gw_h / 3; y <= state->gw_h * 2 / 3; y++){
+                mvwhline(state->gamew, y, state->gw_w / 3, WATER, state->gw_w / 3); 
+            }
+            wattroff(state->gamew, COLOR_PAIR(C_WATER));
+            wattron(state->gamew, COLOR_PAIR(C_WALL));
+
+            // 2 walls
+            mvwhline(state->gamew, state->gw_h * 0.2, state->gw_w * 0.3, WALL, state->gw_w * 0.7); 
+            mvwhline(state->gamew, state->gw_h * 0.8, 0, WALL, state->gw_w * 0.7); 
+
+            break;
+            }
+        case 2:
+            {
             /* just one vertical wall */
             mvwvline(state->gamew, 0, state->gw_w / 2, WALL, state->gw_h * 0.7); 
             break;
-        case 2:
+            }
+        case 3:
+            {
             /* three walls */
             mvwvline(state->gamew, 0, state->gw_w / 2, WALL, state->gw_h * 0.7); 
             mvwhline(state->gamew, state->gw_h / 2, 0, WALL, state->gw_w * 0.3333); 
             mvwhline(state->gamew, state->gw_h / 2, state->gw_w * 0.6666, WALL, state->gw_w * 0.3333 + 1); 
             break;
-        case 3:
+            }
+        case 4:
+            {
             /* still three walls, centered */
             int hl = state->gw_w * 0.7;
             int vl = state->gw_h * 0.8;
@@ -596,6 +710,7 @@ void draw_map(game_state* state, int map)
             mvwhline(state->gamew, state->gw_h * 0.3333, (state->gw_w - hl) / 2, WALL, hl); 
             mvwhline(state->gamew, state->gw_h * 0.6666, (state->gw_w - hl) / 2, WALL, hl); 
             break;
+            }
     }
     wattroff(state->gamew, COLOR_PAIR(C_WALL));
 }
