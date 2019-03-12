@@ -5,20 +5,19 @@ support for maps and interactive resizing.
 
 ![tsnake](https://raw.githubusercontent.com/langurmonkey/tsnake/master/img/tsnake.gif)
 
-Move the snake using the arrow keys `↑↓←→`, `wasd` or vi's `hjkl`.
-The game starts with a speed of 2 m/s and every 20 points the speed
-is increased by one until the maximum speed of 20 m/s is reached.
-The speed can be increased with `+` and decreased with `-` during gameplay if
-cheat mode (`--cheat`) is enabled.
-
+Move the snake using the arrow keys [`↑↓←→`], [`wasd`] or vi's [`hjkl`].
 Here are some controls:
 
--  (`p`) pause the game
--  (`r`) restart with next map
--  (`q`) show quit dialog
+-  [`p`] Pause the game
+-  [`r`] Restart with next map
+-  [`q`] Quit
 
-The game has a few maps which can be activated using the -m option.
-Maps are cycled automatically when the game is restarted.
+The game starts with a speed of 2 m/s and every 20 points the speed
+is increased until a maximum of 20 m/s.
+If cheat mode is enabled (`--cheat`), the speed can be increased with [`+`] and decreased with [`-`].
+
+The game has a few maps which can be chosen using the `-m` option.
+Otherwise, maps are cycled automatically when the game is restarted.
 
 ## Installation
 
