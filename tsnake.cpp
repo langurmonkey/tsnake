@@ -16,27 +16,44 @@
 /* defines */
 #define VERSION     "0.1.2"
 
+// number of mpas
 #define N_MAPS      5
 
+// characters
 #define EMPTY  	    ' '
 #define SNAKE       'o'
 #define FOOD        'X'
 #define WALL        '#'
 #define WATER       '^'
 
+// directions
 #define UP          0
 #define DOWN        1
 #define RIGHT       2
 #define LEFT        3
 
+// initial lenght
 #define START_LEN   4
 
+// alignments
 #define ALIGN_RIGHT 0
 #define ALIGN_LEFT  1
 
+// return codes
 #define R_QUIT            0
 #define R_RESTART_NEW     1
 #define R_RESTART_SAME    2
+
+// color locations
+#define C_DEFAULT 1
+#define C_FOOD    2
+#define C_SNAKE   3
+#define C_STATUS  4
+#define C_BORDER  5
+#define C_GREEN   6
+#define C_WALL    7
+#define C_SNAKE_H 8
+#define C_WATER   9
 
 /* structs */
 struct point {
@@ -96,16 +113,6 @@ int start_game(int start_length, int map);
 /* global variables */
 bool cheat;
 
-/* color locations */
-#define C_DEFAULT 1
-#define C_FOOD    2
-#define C_SNAKE   3
-#define C_STATUS  4
-#define C_BORDER  5
-#define C_GREEN   6
-#define C_WALL    7
-#define C_SNAKE_H 8
-#define C_WATER   9
 
 int main(int argc, char** argv)
 {
