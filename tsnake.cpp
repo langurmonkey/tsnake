@@ -196,6 +196,10 @@ int main(int argc, char** argv)
     cbreak();
     noecho();
     curs_set(0);
+    short r, g, b;
+    color_content(COLOR_BLACK, &r, &g, &b);
+    // set bright black black
+    init_color(8, r, g, b);
     init_pair(C_STATUS, COLOR_BLACK, COLOR_CYAN);
     init_pair(C_FOOD, COLOR_CYAN, COLOR_MAGENTA);
     init_pair(C_SNAKE, COLOR_RED, COLOR_GREEN);
@@ -420,10 +424,8 @@ int start_game(int start_length, int map)
         secs = ((float)(state.curr - start) / CLOCKS_PER_SEC);
         std::string st = "Score: " + std::to_string(state.score) + " | " + std::to_string((int) secs) + " seconds | " + std::to_string((int) state.speed) + " m/s";
 
-        attron(A_BOLD);
-        print_status(" [p]Pause [r]Restart [q]Quit", ALIGN_LEFT, C_STATUS);
-        attroff(A_BOLD);
-        print_status(st, ALIGN_RIGHT, C_STATUS);
+        print_status(" [p]Pause [r]Restart [q]Quit", ALIGN_LEFT, A_BOLD | COLOR_PAIR(C_STATUS));
+        print_status(st, ALIGN_RIGHT, COLOR_PAIR(C_STATUS));
 
         
         /* title */
@@ -500,7 +502,7 @@ int ask_end()
 
 void print_status(std::string status, int align, int col)
 {
-    attron(COLOR_PAIR(col));
+    attron(col);
     switch(align){
         case ALIGN_LEFT:
             move(LINES - 1, 0);
@@ -511,7 +513,7 @@ void print_status(std::string status, int align, int col)
             printw(status.c_str());
             break;
     }
-    attroff(COLOR_PAIR(col));
+    attroff(col);
 }
 
 void redraw_entities(game_state* state){
