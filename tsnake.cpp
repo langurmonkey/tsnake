@@ -14,7 +14,7 @@
 #include "InputParser.h"
 
 /* defines */
-#define VERSION     "0.1.1"
+#define VERSION     "0.1.2"
 
 #define N_MAPS      5
 
