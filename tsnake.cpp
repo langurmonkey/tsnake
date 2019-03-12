@@ -22,7 +22,7 @@
 // characters
 #define EMPTY  	    ' '
 #define SNAKE       'o'
-#define FOOD        'X'
+#define FOOD        '@'
 #define WALL        '#'
 #define WATER       '^'
 
@@ -436,7 +436,9 @@ int start_game(int start_length, int map)
             mapstr.append(" - MAP " + std::to_string(map % N_MAPS  + 1) + "  (" + std::to_string(COLS) + "x" + std::to_string(LINES) + ") ");
             mvwaddstr(state.gamew, 0, 4, mapstr.c_str());
         }else{
-            mvwaddstr(state.gamew, 0, 4, " GAME PAUSED - [p]continue ");
+            wattron(state.gamew, COLOR_PAIR(C_GREEN));
+            mvwaddstr(state.gamew, 0, 4, " GAME PAUSED - [p]Continue ");
+            wattroff(state.gamew, COLOR_PAIR(C_GREEN));
         }
         wattroff(state.gamew, COLOR_PAIR(C_BORDER));
         
