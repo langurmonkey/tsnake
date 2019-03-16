@@ -165,10 +165,10 @@ int main(int argc, char** argv)
     }
 
     /* first map */
-    int first_map = 0;
+    int map_id = 0;
     if(ip.exists("-m")){
         try{
-            first_map = ip.getInt("-m");
+            map_id = ip.getInt("-m");
         }catch(const std::invalid_argument& ia){
             std::cout << "Bad argument: m = '" << ip.getStr("-m") << "', must be an integer" << std::endl;
             return 0;
@@ -214,12 +214,12 @@ int main(int argc, char** argv)
     /* start the game */
     start_length = std::clamp(start_length, 1, (COLS - 5) / 2);
 
-    int ret = start_game(start_length, first_map);
+    int ret = R_RESTART_SAME;
     while(ret != R_QUIT){
         if(ret == R_RESTART_SAME)
-            ret = start_game(start_length, first_map);
+            ret = start_game(start_length, map_id);
         else if(ret == R_RESTART_NEW)
-            ret = start_game(start_length, ++first_map);
+            ret = start_game(start_length, ++map_id);
     }
 
     /* clean up */
