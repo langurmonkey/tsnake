@@ -641,7 +641,7 @@ int out_of_bounds(game_state* state, int y, int x)
 int collision_check(game_state* state, int y, int x)
 {
     int testch = mvwinch(state->gamew, y, x) & A_CHARTEXT;
-    return testch == SNAKE || testch == WALL || out_of_bounds(state, y, x);
+    return (testch != EMPTY && testch != FOOD) || out_of_bounds(state, y, x);
 }
 
 void draw_map(game_state* state, int map)
