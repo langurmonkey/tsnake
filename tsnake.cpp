@@ -113,6 +113,10 @@ int start_game(int start_length, int map);
 /* global variables */
 bool cheat;
 
+template <typename T>
+T clip(const T& n, const T& lower, const T& upper) {
+  return std::max(lower, std::min(n, upper));
+}
 
 int main(int argc, char** argv)
 {
@@ -212,7 +216,7 @@ int main(int argc, char** argv)
     clear();
 
     /* start the game */
-    start_length = std::clamp(start_length, 1, (COLS - 5) / 2);
+    start_length = clip(start_length, 1, (COLS - 5) / 2);
 
     int ret = R_RESTART_SAME;
     while(ret != R_QUIT){
@@ -456,8 +460,8 @@ int start_game(int start_length, int map)
     std::string msg0 = "[s] Restart (same map)";
     std::string msg2 = "[q] Quit";
     int minl = msg1.size();
-    int ew_w = std::clamp(COLS / 2, minl, COLS);
-    int ew_h = std::clamp(LINES / 2, 4, LINES);
+    int ew_w = clip(COLS / 2, minl, COLS);
+    int ew_h = clip(LINES / 2, 4, LINES);
     WINDOW* endw = newwin(ew_h, ew_w, (LINES - ew_h) / 2, (COLS - ew_w) / 2);
     wbkgd(endw, COLOR_PAIR(C_STATUS));
     nodelay(stdscr, FALSE);
@@ -616,14 +620,14 @@ bool speed_down(game_state* state)
 bool speed_scl(game_state* state, float scale)
 {
     float cpy = state->speed;
-    state->speed = std::clamp(state->speed * scale, 1.0F, 20.0F);
+    state->speed = clip(state->speed * scale, 1.0F, 20.0F);
     return cpy != state->speed;
 }
 
 bool speed_add(game_state* state, float add)
 {
     float cpy = state->speed;
-    state->speed = std::clamp(state->speed + add, 1.0F, 20.0F);
+    state->speed = clip(state->speed + add, 1.0F, 20.0F);
     return cpy != state->speed;
 }
 
