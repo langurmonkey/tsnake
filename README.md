@@ -19,6 +19,11 @@ If cheat mode is enabled (`--cheat`), the speed can be increased with [`+`] and 
 The game has a few maps which can be chosen using the `-m` option.
 Otherwise, maps are cycled automatically when the game is restarted.
 
+## Requirements
+
+* C++17
+* ncurses
+
 ## Installation
 
 If you are on **Arch Linux** or derivatives, use our [`tsnake`](https://aur.archlinux.org/packages/tsnake/) AUR package:
