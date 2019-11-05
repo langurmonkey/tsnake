@@ -14,7 +14,7 @@
 #include "InputParser.h"
 
 /* defines */
-#define VERSION     "0.1.2"
+#define VERSION     "0.1.5"
 
 // number of mpas
 #define N_MAPS      5
